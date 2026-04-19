@@ -36,12 +36,18 @@ class Kernel extends HttpKernel
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            
+            // 🔐 Middleware personnalisé : vérifie que l'utilisateur a etat=1
+            \App\Http\Middleware\EnsureUserIsActive::class,
         ],
 
         'api' => [
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            
+            // 📡 Middleware optionnel : force le format JSON pour les réponses API
+            // \App\Http\Middleware\ForceJsonResponse::class,
         ],
     ];
 
@@ -53,6 +59,7 @@ class Kernel extends HttpKernel
      * @var array<string, class-string|string>
      */
     protected $middlewareAliases = [
+        // ── Middlewares Laravel par défaut ──
         'auth' => \App\Http\Middleware\Authenticate::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
@@ -64,5 +71,38 @@ class Kernel extends HttpKernel
         'signed' => \App\Http\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        
+        // ── 🔐 Middlewares personnalisés du projet ──
+        
+        /**
+         * Vérifie que l'utilisateur connecté a etat=1 (actif).
+         * Si etat=2 (suspendu), déconnecte et retourne une erreur.
+         * 
+         * Utilisation : Route::middleware(['auth', 'check.active'])->group(...)
+         */
+        'check.active' => \App\Http\Middleware\EnsureUserIsActive::class,
+        
+        /**
+         * Contrôle d'accès par rôle.
+         * Accepte plusieurs rôles en paramètre : 'role:admin,chef_service'
+         * 
+         * Utilisation : Route::middleware('role:admin,super_admin')->group(...)
+         */
+        'role' => \App\Http\Middleware\CheckRole::class,
+        
+        /**
+         * Journalise les actions critiques (POST/PUT/DELETE) pour l'audit.
+         * 
+         * Utilisation : Route::middleware('log.activity')->post(...)
+         */
+        'log.activity' => \App\Http\Middleware\LogUserActivity::class,
+        
+        /**
+         * Force le format JSON pour les réponses, même si le client demande du HTML.
+         * Utile pour les routes API consommées par JS/mobile.
+         * 
+         * Utilisation : Route::middleware('force.json')->get(...)
+         */
+        'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
     ];
 }

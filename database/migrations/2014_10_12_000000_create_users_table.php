@@ -13,11 +13,25 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
+
+            // 👤 Identité & Authentification (conservés pour compatibilité Laravel)
+            $table->string('name')->comment('Nom complet ou identifiant d\'affichage');
+            $table->string('email')->unique()->index();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
+
+            // 🔐 Rôles & Habilitations
+            $table->string('role')->default('agent')->index()->comment('admin, agent, secretaire, chef_service, super_admin');
+
+            // 🗑️ État du compte (cohérent avec le reste du projet)
+            $table->integer('etat')->default(1)->index()->comment('1=actif, 2=suspendu/supprimé');
+
+            // 📱 Profil & Métadonnées
+            $table->string('telephone')->nullable();
+            $table->string('avatar')->nullable()->comment('Chemin relatif vers la photo de profil');
+            $table->timestamp('derniere_connexion')->nullable()->index()->comment('Dernière authentification réussie');
+
             $table->timestamps();
         });
     }
