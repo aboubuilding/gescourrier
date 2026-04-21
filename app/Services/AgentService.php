@@ -25,7 +25,8 @@ class AgentService
     {
         $query = $this->repo->query()
             ->where('etat', Agent::ETAT_ACTIF)
-            ->with(['user', 'service']) // Évite les requêtes N+1
+            // ✅ CORRECTION : Charger service.organisation pour éviter LazyLoadingViolation
+            ->with(['user', 'service.organisation'])
             ->latest();
 
         // Filtres optionnels
@@ -44,7 +45,8 @@ class AgentService
      */
     public function formatAgent(Agent $agent): array
     {
-        $agent->loadMissing(['user', 'service']);
+        // ✅ Optionnel : loadMissing avec la relation imbriquée (sécurité supplémentaire)
+        $agent->loadMissing(['user', 'service.organisation']);
 
         return [
             // 🪪 Identité
@@ -69,6 +71,7 @@ class AgentService
             'service' => $agent->service ? [
                 'id'             => $agent->service->id,
                 'nom'            => $agent->service->nom,
+                // ✅ Maintenant ça marche car organisation est chargé
                 'organisation'   => $agent->service->organisation?->nom ?? null,
                 'sigle_orga'     => $agent->service->organisation?->sigle ?? null,
             ] : null,

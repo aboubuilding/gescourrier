@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory; // ✅ Import
+use Illuminate\Database\Eloquent\Relations\HasMany; // ✅ IMPORT CORRECT
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Service extends Model
@@ -34,5 +35,13 @@ class Service extends Model
     public function restaurer(): bool
     {
         return $this->update(['etat' => self::ETAT_ACTIF]);
+    }
+
+     /**
+     * Un service a plusieurs agents
+     */
+    public function agents(): HasMany
+    {
+        return $this->hasMany(Agent::class, 'service_id');
     }
 }

@@ -39,6 +39,8 @@ class CourrierService
         return $query->get()->map(fn($c) => $this->formatCourrier($c))->toArray();
     }
 
+
+
     /**
      * Formate un courrier avec ses relations, métadonnées et libellés métier.
      * Structure idéale pour les réponses JSON / ressources API.
@@ -163,13 +165,22 @@ class CourrierService
     public function rechercher(array $filtres): LengthAwarePaginator { return $this->repo->rechercher($filtres); }
 
     public function getStats(): array
-    {
-        return [
-            'par_statut'       => $this->repo->countByStatut(),
-            'par_periode'      => $this->repo->countByPeriode(),
-            'urgents_non_traite' => $this->repo->getUrgentsNonTraites()->count(),
-        ];
-    }
+{
+    // Base query : courriers actifs uniquement
+    $base = \App\Models\Courrier::where('etat', 1);
+
+    return [
+        // KPI Cards
+        'total'        => (clone $base)->count(),
+        'entrants'     => (clone $base)->where('type', \App\Models\Courrier::TYPE_ENTRANT)->count(),
+        'sortants'     => (clone $base)->where('type', \App\Models\Courrier::TYPE_SORTANT)->count(),
+        'internes'     => (clone $base)->where('type', \App\Models\Courrier::TYPE_INTERNE)->count(),
+        'tres_urgents' => (clone $base)->where('priorite', \App\Models\Courrier::PRIORITE_TRES_URGENTE)->count(),
+        'archives'     => (clone $base)->where('statut', \App\Models\Courrier::STATUT_ARCHIVE)->count(),
+
+       
+    ];
+}
 
     // ========================================================================
     // 🛠️ Helpers internes
@@ -194,10 +205,29 @@ class CourrierService
         return round($taille, 2) . ' ' . $units[$i];
     }
 
-    protected function formatEnum(int|string $code, array $list): array
-    {
-        return ['code' => $code, 'libelle' => $list[$code] ?? 'Inconnu'];
+   /**
+ * Formate une valeur enum (type, statut, priorité, etc.)
+ * Accepte null pour éviter les erreurs lors de la création/modification
+ */
+protected function formatEnum(int|string|null $code, array $list): array
+{
+    // Si le code est null ou vide, on retourne une valeur par défaut sûre
+    if ($code === null || $code === '') {
+        return [
+            'code' => null,
+            'libelle' => 'Non défini'
+        ];
     }
+
+    // Conversion explicite en entier ou chaîne selon la clé du tableau
+    // Cela évite les erreurs si la base renvoie "0" (string) au lieu de 0 (int)
+    $key = is_int($code) ? $code : (is_numeric($code) ? (int)$code : $code);
+
+    return [
+        'code' => $code,
+        'libelle' => $list[$key] ?? 'Inconnu'
+    ];
+}
 
     protected function formatRelation(?object $relation, array $fields): ?array
     {
