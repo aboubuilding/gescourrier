@@ -80,6 +80,14 @@ class Organisation extends Model
         return $this->hasMany(Courrier::class, 'expediteur_id');
     }
 
+     public function courriers()
+    {
+        // Si la clé étrangère dans courriers est 'organisation_id'
+        return $this->hasMany(Courrier::class, 'organisation_id');
+        
+        
+    }
+
     /**
      * Une organisation est destinataire de PLUSIEURS courriers
      * (si tu as un champ destinataire_id dans courriers pointant vers organisations)
@@ -87,6 +95,36 @@ class Organisation extends Model
     public function courriersRecus(): HasMany
     {
         return $this->hasMany(Courrier::class, 'destinataire_id');
+    }
+
+
+        public function courriersEntrants()
+    {
+        return $this->courriers()->where('type', Courrier::TYPE_ENTRANT);
+    }
+    
+    /**
+     * Relation avec les courriers sortants
+     */
+    public function courriersSortants()
+    {
+        return $this->courriers()->where('type', Courrier::TYPE_SORTANT);
+    }
+    
+    /**
+     * Relation avec les courriers internes
+     */
+    public function courriersInternes()
+    {
+        return $this->courriers()->where('type', Courrier::TYPE_INTERNE);
+    }
+    
+    /**
+     * Relation avec les courriers urgents
+     */
+    public function courriersUrgents()
+    {
+        return $this->courriers()->where('priorite', '>=', 1);
     }
 
     // ═══════════════════════════════════════

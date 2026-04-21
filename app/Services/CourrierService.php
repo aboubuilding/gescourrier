@@ -24,20 +24,25 @@ class CourrierService
      * Retourne tous les courriers actifs, formatés et prêts pour l'API/Frontend.
      * @param array $filtres Optionnels : service_id, type, statut
      */
-    public function liste(array $filtres = []): array
-    {
-        $query = $this->repo->query()
-            ->where('etat', Courrier::ETAT_ACTIF)
-            ->with(['agent', 'service', 'utilisateur', 'organisation']) // Évite les requêtes N+1
-            ->latest('date_reception');
+ public function liste(array $filtres = []): array
+{
+    $query = $this->repo->query()
+        ->where('etat', Courrier::ETAT_ACTIF)
+        ->with([
+            'agent.service', // ✅ correction ici
+            'service',
+            'utilisateur',
+            'organisation'
+        ])
+        ->orderBy('created_at', 'desc')
+        ->orderBy('id', 'desc');
 
-        // Filtres optionnels
-        !empty($filtres['service_id']) && $query->where('service_id', $filtres['service_id']);
-        !empty($filtres['type']) && $query->where('type', $filtres['type']);
-        !empty($filtres['statut']) && $query->where('statut', $filtres['statut']);
+    !empty($filtres['service_id']) && $query->where('service_id', $filtres['service_id']);
+    !empty($filtres['type']) && $query->where('type', $filtres['type']);
+    !empty($filtres['statut']) && $query->where('statut', $filtres['statut']);
 
-        return $query->get()->map(fn($c) => $this->formatCourrier($c))->toArray();
-    }
+    return $query->get()->map(fn($c) => $this->formatCourrier($c))->toArray();
+}
 
 
 
@@ -45,57 +50,75 @@ class CourrierService
      * Formate un courrier avec ses relations, métadonnées et libellés métier.
      * Structure idéale pour les réponses JSON / ressources API.
      */
-    public function formatCourrier(Courrier $courrier): array
-    {
-        $courrier->loadMissing(['agent', 'service', 'utilisateur', 'organisation']);
+   public function formatCourrier(Courrier $courrier): array
+{
+    // Chargement des relations manquantes (évite les requêtes N+1)
+    $courrier->loadMissing(['agent', 'service', 'utilisateur', 'organisation']);
 
-        return [
-            // 🔖 Identifiants
-            'id'        => $courrier->id,
-            'reference' => $courrier->reference,
-            'numero'    => $courrier->numero,
+    return [
+        // 🔖 Identifiants
+        'id'        => $courrier->id,
+        'reference' => $courrier->reference,
+        'numero'    => $courrier->numero,
 
-            // 📊 Classification (code + libellé)
-            'type'     => $this->formatEnum($courrier->type, Courrier::getTypesList()),
-            'priorite' => $this->formatEnum($courrier->priorite, Courrier::getPrioritesList()),
-            'statut'   => $this->formatEnum($courrier->statut, Courrier::getStatutsList()),
+        // 📊 Classification (code + libellé)
+        'type'     => $this->formatEnum($courrier->type, Courrier::getTypesList()),
+        'priorite' => $this->formatEnum($courrier->priorite, Courrier::getPrioritesList()),
+        'statut'   => $this->formatEnum($courrier->statut, Courrier::getStatutsList()),
 
-            // 📝 Contenu
-            'objet'       => $courrier->objet,
-            'description' => $courrier->description,
-           
+        // 📝 Contenu
+        'objet'       => $courrier->objet,
+        'description' => $courrier->description,
 
-            // 📅 Dates
-            'dates' => [
-                'reception'   => $courrier->date_reception?->format('Y-m-d'),
-                'envoi'       => $courrier->date_envoi?->format('Y-m-d'),
-                'affectation' => $courrier->date_affectation?->format('Y-m-d H:i'),
-                'traitement'  => $courrier->date_traitement?->format('Y-m-d H:i'),
-            ],
+        // 📅 Dates
+        'dates' => [
+            'reception'   => $courrier->date_reception?->format('Y-m-d'),
+            'envoi'       => $courrier->date_envoi?->format('Y-m-d'),
+            'affectation' => $courrier->date_affectation?->format('Y-m-d H:i'),
+            'traitement'  => $courrier->date_traitement?->format('Y-m-d H:i'),
+        ],
 
-            // 📎 Fichier scanné
-            'fichier' => $courrier->url_fichier ? [
-                'url'            => Storage::disk('public')->url($courrier->url_fichier),
-                'nom_original'   => $courrier->fichier_nom_original,
-                'mime_type'      => $courrier->fichier_mime_type,
-                'taille_octets'  => $courrier->fichier_taille,
-                'taille_formatee'=> $this->formatTaille($courrier->fichier_taille),
+        // 📎 Fichier scanné
+        'fichier' => $courrier->url_fichier ? [
+            'url'            => Storage::disk('public')->url($courrier->url_fichier),
+            'nom_original'   => $courrier->fichier_nom_original,
+            'mime_type'      => $courrier->fichier_mime_type,
+            'taille_octets'  => $courrier->fichier_taille,
+            'taille_formatee'=> $this->formatTaille($courrier->fichier_taille),
+        ] : null,
+
+        // 👥 Acteurs & Entités impliquées
+        'acteurs' => [
+            // ✅ AGENT : Formatage inline direct (sans formatUser)
+            'agent' => $courrier->agent ? [
+                'id'           => $courrier->agent->id,
+                'nom'          => $courrier->agent->nom,
+                'prenom'       => $courrier->agent->prenom,
+                'nom_complet'  => trim($courrier->agent->prenom . ' ' . $courrier->agent->nom),
+                'email'        => $courrier->agent->email ?? null,
+                'fonction'     => $courrier->agent->fonction ?? 'Agent',
+                'telephone'    => $courrier->agent->telephone ?? null,
+                'service_id'   => $courrier->agent->service_id,
+                // Si l'agent a une relation avec un modèle User, tu peux aussi ajouter :
+                // 'user_id' => $courrier->agent->user_id,
             ] : null,
+            
+            // Service : Formatage simple avec formatRelation
+            'service' => $this->formatRelation($courrier->service, ['id', 'nom']),
+            
+            // Utilisateur : On garde formatUser si c'est utile ailleurs
+            'utilisateur' => $this->formatUser($courrier->utilisateur),
+            
+            // Organisation : Formatage simple
+            'organisation' => $this->formatRelation($courrier->organisation, ['id', 'nom', 'sigle']),
+        ],
 
-            // 👥 Acteurs & Entités impliquées
-            'acteurs' => [
-                'agent'        => $this->formatUser($courrier->agent),
-                'service'      => $this->formatRelation($courrier->service, ['id', 'nom']),
-                'utilisateur'  => $this->formatUser($courrier->utilisateur),
-                'organisation' => $this->formatRelation($courrier->organisation, ['id', 'nom', 'sigle']),
-            ],
-
-            // ⏱️ Horodatage
-            'etat'       => $courrier->etat === Courrier::ETAT_ACTIF ? 'actif' : 'supprimé',
-            'created_at' => $courrier->created_at?->format('Y-m-d H:i:s'),
-            'updated_at' => $courrier->updated_at?->format('Y-m-d H:i:s'),
-        ];
-    }
+        // ⏱️ Horodatage
+        'etat'       => $courrier->etat === Courrier::ETAT_ACTIF ? 'actif' : 'supprimé',
+        'created_at' => $courrier->created_at?->format('Y-m-d H:i:s'),
+        'updated_at' => $courrier->updated_at?->format('Y-m-d H:i:s'),
+    ];
+}
 
     // ========================================================================
     // 📥 Création & Mise à jour
@@ -120,7 +143,27 @@ class CourrierService
     // 🗑️ Gestion du cycle de vie (etat)
     // ========================================================================
 
-    public function supprimer(int $id): bool { return $this->repo->supprimer($id); }
+    public function supprimer(int $id): bool
+{
+    // 1. Récupérer le courrier
+    $courrier = $this->repo->findOrFail($id);
+
+    // 2. Supprimer le fichier physique s'il existe
+    if (!empty($courrier->url_fichier)) {
+        // Vérifie si le fichier existe sur le disque 'public'
+        if (Storage::disk('public')->exists($courrier->url_fichier)) {
+            Storage::disk('public')->delete($courrier->url_fichier);
+        }
+    }
+
+    // 3. Mettre à jour l'état à 0 (Inactif/Supprimé)
+    // On utilise update directement sur le modèle ou via le repo selon ton architecture
+    $courrier->update([
+        'etat' => 0 
+    ]);
+
+    return true;
+}
     public function restaurer(int $id): bool   { return $this->repo->restaurer($id); }
 
     // ========================================================================

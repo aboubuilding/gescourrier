@@ -1,0 +1,808 @@
+/* ============================================
+   ORGANISATIONS PAGE - STYLES COMPLETS
+   ============================================ */
+
+/* === VARIABLES ET RESET === */
+.organisations-page {
+    --success: #009a44;
+    --success-rgb: 0, 154, 68;
+    --warning: #f59e0b;
+    --warning-rgb: 245, 158, 11;
+    --danger: #dc2626;
+    --danger-rgb: 220, 38, 38;
+    --info: #3b82f6;
+    --info-rgb: 59, 130, 246;
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --bg-card: #ffffff;
+    --bg-hover: #f8fafc;
+    --border: #e2e8f0;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --radius-lg: 12px;
+    --transition: all 0.2s ease;
+}
+
+/* === STATS GRID & CARDS === */
+.organisations-page .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.organisations-page .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.organisations-page .stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--success);
+}
+
+.organisations-page .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--success);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.organisations-page .stat-card:hover::after {
+    opacity: 1;
+}
+
+.organisations-page .stat-card.interne::after {
+    background: var(--info);
+}
+
+.organisations-page .stat-card.externe::after {
+    background: var(--warning);
+}
+
+.organisations-page .stat-card.gouvernement::after {
+    background: var(--success);
+}
+
+.organisations-page .stat-card.prive::after {
+    background: var(--danger);
+}
+
+.organisations-page .stat-card.ong::after {
+    background: var(--info);
+}
+
+.organisations-page .stat-card.actif::after {
+    background: var(--success);
+}
+
+/* === STAT ICONS === */
+.organisations-page .stat-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    background: var(--success);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.primaire {
+    background: var(--success);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.interne {
+    background: var(--info);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.externe {
+    background: var(--warning);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.gouvernement {
+    background: var(--success);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.prive {
+    background: var(--danger);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.ong {
+    background: var(--info);
+    color: #fff;
+}
+
+.organisations-page .stat-icon.actif {
+    background: var(--success);
+    color: #fff;
+}
+
+/* === STAT VALUES === */
+.organisations-page .stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.organisations-page .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+}
+
+/* === FILTER BAR === */
+.organisations-page .filter-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+}
+
+.organisations-page .filter-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.organisations-page .filter-input,
+.organisations-page .filter-select {
+    width: 100%;
+    background: var(--bg-hover);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.organisations-page .filter-input:focus,
+.organisations-page .filter-select:focus {
+    border-color: var(--success);
+    background: var(--bg-card);
+    box-shadow: 0 0 0 4px rgba(0, 154, 68, 0.1);
+}
+
+.organisations-page .filter-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    padding-right: 36px;
+    cursor: pointer;
+}
+
+/* === BUTTON FILTER RESET === */
+.organisations-page .btn-filter-reset {
+    background: var(--bg-hover);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.organisations-page .btn-filter-reset:hover {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(0, 154, 68, 0.05);
+}
+
+/* === TYPE PILLS === */
+.organisations-page .type-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.organisations-page .type-pill {
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid var(--border);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    transition: var(--transition);
+    user-select: none;
+}
+
+.organisations-page .type-pill:hover {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(0, 154, 68, 0.05);
+}
+
+.organisations-page .type-pill.active {
+    background: var(--success);
+    color: #fff;
+    border-color: var(--success);
+    box-shadow: 0 4px 12px rgba(0, 154, 68, 0.3);
+}
+
+.organisations-page .type-pill[data-type="0"].active {
+    background: var(--warning);
+    border-color: var(--warning);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.organisations-page .type-pill[data-type="1"].active {
+    background: var(--info);
+    border-color: var(--info);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.organisations-page .type-pill[data-type="2"].active {
+    background: var(--success);
+    border-color: var(--success);
+    box-shadow: 0 4px 12px rgba(0, 154, 68, 0.3);
+}
+
+.organisations-page .type-pill[data-type="3"].active {
+    background: var(--danger);
+    border-color: var(--danger);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.organisations-page .type-pill[data-type="4"].active {
+    background: var(--info);
+    border-color: var(--info);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* === TABLE PANEL === */
+.organisations-page .table-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.organisations-page .table-panel-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-hover);
+}
+
+.organisations-page .table-panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.organisations-page .table-panel-title i {
+    color: var(--success);
+}
+
+.organisations-page .count-badge {
+    background: var(--success);
+    color: #fff;
+    border: 1px solid var(--success);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+/* === DATATABLE STYLES === */
+.organisations-page .dataTable thead th {
+    background: var(--bg-hover) !important;
+    color: var(--text-muted) !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.6px !important;
+    border-bottom: 2px solid var(--success) !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    padding: 14px 16px !important;
+}
+
+.organisations-page .dataTable tbody tr {
+    transition: background 0.15s !important;
+}
+
+.organisations-page .dataTable tbody tr:hover {
+    background: rgba(0, 154, 68, 0.03) !important;
+}
+
+.organisations-page .dataTable tbody td {
+    padding: 12px 16px !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text-secondary) !important;
+    vertical-align: middle !important;
+    font-size: 13px !important;
+}
+
+/* === ORGANISATION CELL === */
+.organisations-page .org-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.organisations-page .org-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--success);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+
+.organisations-page .org-info .org-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.organisations-page .org-info .org-sigle {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-family: monospace;
+}
+
+/* === BADGES === */
+.organisations-page .badge-type,
+.organisations-page .badge-statut {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.organisations-page .badge-type.interne {
+    background: var(--info);
+    color: #fff;
+}
+
+.organisations-page .badge-type.externe {
+    background: var(--warning);
+    color: #fff;
+}
+
+.organisations-page .badge-type.gouvernement {
+    background: var(--success);
+    color: #fff;
+}
+
+.organisations-page .badge-type.prive {
+    background: var(--danger);
+    color: #fff;
+}
+
+.organisations-page .badge-type.ong {
+    background: var(--info);
+    color: #fff;
+}
+
+.organisations-page .badge-statut.actif {
+    background: var(--success);
+    color: #fff;
+}
+
+.organisations-page .badge-statut.inactif {
+    background: var(--text-muted);
+    color: #fff;
+}
+
+.organisations-page .badge-statut::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 4px;
+}
+
+/* === CONTACT CHIP === */
+.organisations-page .contact-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.organisations-page .contact-chip a {
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.organisations-page .contact-chip a:hover {
+    color: var(--success);
+}
+
+/* === ACTION DROPDOWN === */
+.organisations-page .action-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.organisations-page .action-trigger {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: var(--transition);
+}
+
+.organisations-page .action-trigger:hover,
+.organisations-page .action-dropdown.open .action-trigger {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(0, 154, 68, 0.05);
+}
+
+.organisations-page .action-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 190px;
+    background: var(--bg-card);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: var(--transition);
+    border-top: 3px solid var(--success);
+    pointer-events: none;
+}
+
+.organisations-page .action-dropdown.open .action-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.organisations-page .action-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition);
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+}
+
+.organisations-page .action-item i {
+    width: 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.organisations-page .action-item:hover {
+    background: rgba(0, 154, 68, 0.05);
+    color: var(--success);
+}
+
+.organisations-page .action-item:hover i {
+    color: var(--success);
+}
+
+.organisations-page .action-item.danger {
+    color: var(--danger);
+}
+
+.organisations-page .action-item.danger i {
+    color: var(--danger);
+}
+
+.organisations-page .action-item.danger:hover {
+    background: rgba(220, 38, 38, 0.05);
+    color: var(--danger);
+}
+
+.organisations-page .action-item.danger:hover i {
+    color: var(--danger);
+}
+
+.organisations-page .action-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 5px 0;
+}
+
+/* === EMPTY STATE === */
+.organisations-page .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.organisations-page .empty-state i {
+    font-size: 42px;
+    opacity: 0.3;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.organisations-page .empty-state p {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* === MODALS === */
+.organisations-page .modal-content {
+    border: none;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.organisations-page .modal-header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 24px;
+}
+
+.organisations-page .modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.organisations-page .modal-body {
+    padding: 24px;
+}
+
+.organisations-page .modal-footer {
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+}
+
+/* === FORM STYLES === */
+.organisations-page .form-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.organisations-page .form-control,
+.organisations-page .form-select {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.organisations-page .form-control:focus,
+.organisations-page .form-select:focus {
+    border-color: var(--success);
+    box-shadow: 0 0 0 4px rgba(0, 154, 68, 0.1);
+    outline: none;
+}
+
+.organisations-page .form-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* === ERROR STATES === */
+.organisations-page .is-invalid {
+    border-color: var(--danger) !important;
+}
+
+.organisations-page .invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--danger);
+}
+
+/* === SELECT2 OVERRIDES === */
+.organisations-page .select2-container--default .select2-selection--single {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    height: 44px;
+    background: var(--bg-card);
+}
+
+.organisations-page .select2-container--default .select2-selection--single:focus {
+    border-color: var(--success);
+}
+
+.organisations-page .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 40px;
+    padding-left: 14px;
+    color: var(--text-primary);
+}
+
+.organisations-page .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 40px;
+    right: 10px;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .organisations-page .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .organisations-page .filter-bar .row > div {
+        margin-bottom: 12px;
+    }
+    
+    .organisations-page .org-info .org-sigle {
+        display: none;
+    }
+    
+    .organisations-page .modal-dialog {
+        margin: 16px;
+    }
+    
+    .organisations-page .table-panel-head {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .organisations-page .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .organisations-page .type-pills {
+        justify-content: center;
+    }
+    
+    .organisations-page .action-menu {
+        position: fixed;
+        right: 16px;
+        left: auto;
+    }
+}
+
+/* === ANIMATIONS === */
+@keyframes slideInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.organisations-page .stat-card {
+    animation: slideInUp 0.3s ease;
+}
+
+.organisations-page .filter-bar {
+    animation: fadeIn 0.4s ease;
+}
+
+.organisations-page .table-panel {
+    animation: slideInUp 0.4s ease;
+}
+
+/* === PRINT STYLES === */
+@media print {
+    .organisations-page .stats-grid,
+    .organisations-page .filter-bar,
+    .organisations-page .action-dropdown,
+    .organisations-page .page-actions {
+        display: none !important;
+    }
+    
+    .organisations-page .table-panel {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    .organisations-page .dataTable tbody tr:hover {
+        background: none !important;
+    }
+}

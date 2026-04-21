@@ -7,7 +7,7 @@ use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 
-class CourrierFormRequest extends FormRequest
+class UpdateCourrierRequest extends FormRequest
 {
     public function authorize(): bool
     {

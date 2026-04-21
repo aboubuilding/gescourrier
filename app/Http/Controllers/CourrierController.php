@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CourrierFormRequest;
+use App\Http\Requests\UpdateCourrierRequest;
 use App\Services\CourrierService;
 use App\Models\Courrier;
 use App\Models\Service;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Exception; // Pour capturer les erreurs générales
 
 class CourrierController extends BaseController
 {
@@ -43,7 +45,9 @@ class CourrierController extends BaseController
         // Données pour les selects des modals
         $services = Service::where('etat', 1)->orderBy('nom')->get(['id', 'nom']);
         $organisations = Organisation::where('etat', 1)->orderBy('nom')->get(['id', 'nom', 'sigle']);
-        $agents = Agent::with('user')->where('etat', 1)->get(['id', 'nom', 'prenom', 'fonction', 'user_id']);
+       $agents = Agent::with(['user', 'service']) // ✅ AJOUT ICI
+    ->where('etat', 1)
+    ->get(['id', 'nom', 'prenom', 'fonction', 'user_id', 'service_id']);
 
         return view('courriers.index', compact(
             'courriers', 'filtres', 'stats', 'services', 'organisations', 'agents'
@@ -117,88 +121,134 @@ class CourrierController extends BaseController
     // 📥 STORE : Création (AJAX + Validation)
     // ========================================================================
 
-    public function store(CourrierFormRequest $request): JsonResponse
-    {
-        return $this->execute(function () use ($request) {
-            $validated = $request->validated();
-            
-            // Gestion du fichier scanné
-            $fichier = $request->file('fichier');
-            
-            $courrier = $this->service->creer($validated, $fichier);
-            
-            // Invalider le cache des stats
-            Cache::forget('courriers_stats');
-            
-            return $this->respondSuccess(
-                'Courrier créé avec succès.',
-                $this->service->formatCourrier($courrier),
-                201
-            );
-        });
+public function store(CourrierFormRequest $request): JsonResponse
+{
+    try {
+        $validated = $request->validated();
+        
+        // Gestion du fichier scanné
+        $fichier = $request->file('fichier');
+        
+        $courrier = $this->service->creer($validated, $fichier);
+        
+        // Invalider le cache des stats
+        Cache::forget('courriers_stats');
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Courrier créé avec succès.',
+            'data' => $this->service->formatCourrier($courrier)
+        ], 201);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la création du courrier',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     // ========================================================================
     // ✏️ EDIT : Pré-remplissage du modal modification (JSON)
     // ========================================================================
 
-    public function edit(int $id): JsonResponse
-    {
-        return $this->execute(function () use ($id) {
-            $courrier = Courrier::with(['service', 'organisation'])->findOrFail($id);
-            
-            // Formatage adapté pour le modal
-            $data = [
-                'id' => $courrier->id,
-                'reference' => $courrier->reference,
-                'numero' => $courrier->numero,
-                'type' => $courrier->type,
-                'priorite' => $courrier->priorite,
-                'statut' => $courrier->statut,
-                'objet' => $courrier->objet,
-                'description' => $courrier->description,
-                'expediteur' => $courrier->expediteur,
-                'destinataire' => $courrier->destinataire,
-                'date_reception' => $courrier->date_reception?->format('Y-m-d'),
-                'date_envoi' => $courrier->date_envoi?->format('Y-m-d'),
-                'service_id' => $courrier->service_id,
-                'organisation_id' => $courrier->organisation_id,
-                'agent_id' => $courrier->agent_id,
-                'fichier_nom_original' => $courrier->fichier_nom_original,
-                'fichier_url' => $courrier->url_fichier ? Storage::disk('public')->url($courrier->url_fichier) : null,
-            ];
-            
-            return $this->respondSuccess('Données récupérées.', $data);
-        });
+public function edit($id)
+{
+    try {
+        \Log::info("Tentative d'édition du courrier ID: " . $id);
+        
+        // 1. Récupérer le courrier
+        $courrier = Courrier::with(['organisation', 'service'])->findOrFail($id);
+        
+        \Log::info("Courrier trouvé: " . $courrier->id);
+        
+        // 2. Construire la réponse
+        return response()->json([
+            'id'                => $courrier->id,
+            'type'              => $courrier->type,
+            'priorite'          => $courrier->priorite,
+            'reference'         => $courrier->reference,
+            'numero'            => $courrier->numero,
+            'objet'             => $courrier->objet,
+            'description'       => $courrier->description ?? '',
+            'date_reception'    => $courrier->date_reception ? $courrier->date_reception->format('Y-m-d') : null,
+            'date_envoi'        => $courrier->date_envoi ? $courrier->date_envoi->format('Y-m-d') : null,
+            'organisation_id'   => $courrier->organisation_id,
+            'service_id'        => $courrier->service_id,
+            'fichier_nom_original' => $courrier->fichier_nom_original ?? null,
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error("Erreur lors de l'édition du courrier $id: " . $e->getMessage());
+        return response()->json(['message' => 'Erreur serveur lors du chargement'], 500);
     }
+}
 
     // ========================================================================
     // ✏️ UPDATE : Modification (AJAX + Fichier optionnel)
     // ========================================================================
 
-    public function update(CourrierFormRequest $request, int $id): JsonResponse
-    {
-        return $this->execute(function () use ($request, $id) {
-            // Gestion du fichier si uploadé
-            if ($request->hasFile('fichier')) {
-                // Supprimer l'ancien fichier si existe
-                $ancien = Courrier::findOrFail($id);
-                if ($ancien->url_fichier && Storage::disk('public')->exists($ancien->url_fichier)) {
-                    Storage::disk('public')->delete($ancien->url_fichier);
-                }
-                $this->service->attacherFichier($id, $request->file('fichier'));
-            }
 
-            $courrier = $this->service->mettreAJour($id, $request->validated());
+public function update(UpdateCourrierRequest $request, int $id): JsonResponse
+{
+    try {
+        // 1. Récupération du courrier existant
+        $courrier = Courrier::findOrFail($id);
+        
+        // 2. Gestion du Fichier (Si présent dans la requête)
+        if ($request->hasFile('fichier')) {
+            $file = $request->file('fichier');
             
-            Cache::forget('courriers_stats');
+            // Supprimer l'ancien fichier s'il existe
+            if ($courrier->url_fichier && Storage::disk('public')->exists($courrier->url_fichier)) {
+                Storage::disk('public')->delete($courrier->url_fichier);
+            }
             
-            return $this->respondSuccess(
-                'Courrier mis à jour avec succès.',
-                $this->service->formatCourrier($courrier)
-            );
-        });
+            // Stocker le nouveau fichier
+            $path = $file->store('courriers', 'public');
+            $courrier->url_fichier = $path;
+            $courrier->fichier_nom_original = $file->getClientOriginalName();
+        }
+
+        // 3. Mise à jour des autres données textuelles
+        $data = $request->validated();
+        
+        // Retirer 'fichier' des données si présent
+        unset($data['fichier']);
+        
+        // Mettre à jour le courrier
+        $courrier->fill($data);
+        $courrier->save();
+        
+        // 4. Invalidation du Cache
+        Cache::forget('courriers_stats');
+        
+        // 5. Réponse Succès
+        return response()->json([
+            'success' => true,
+            'message' => 'Courrier mis à jour avec succès.',
+            'data' => $courrier->fresh()
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Le courrier demandé n\'existe pas.'
+        ], 404);
+        
+    } catch (\Exception $e) {
+        \Log::error("Erreur Update Courrier ID $id: " . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Une erreur est survenue lors de la mise à jour.',
+            'error' => config('app.debug') ? $e->getMessage() : 'Erreur interne du serveur.'
+        ], 500);
     }
+}
 
     // ========================================================================
     // 👁️ SHOW : Lecture détaillée (JSON)
@@ -259,21 +309,39 @@ class CourrierController extends BaseController
     // 👤 AFFECTER : Affectation à un agent & service (AJAX)
     // ========================================================================
 
-    public function affecter(Request $request, int $id): JsonResponse
-    {
-        return $this->execute(function () use ($request, $id) {
-            $validated = $request->validate([
-                'agent_id'   => 'required|exists:users,id',
-                'service_id' => 'required|exists:services,id',
-                'note'       => 'nullable|string|max:500',
-            ]);
+public function affecter(Request $request, int $id): JsonResponse
+{
+    return $this->execute(function () use ($request, $id) {
+        
+        // 1. Validation : On ne demande QUE l'agent_id (et la note optionnelle)
+        $validated = $request->validate([
+            'agent_id' => 'required|exists:agents,id', // ou 'agents' selon ta table
+            'note'     => 'nullable|string|max:500',
+            // 'service_id' n'est plus requis ici
+        ]);
 
-            $this->service->affecter($id, $validated['agent_id'], $validated['service_id']);
-            Cache::forget('courriers_stats');
-            
-            return $this->respondSuccess('Courrier affecté avec succès.');
-        });
-    }
+        // 2. Récupération automatique du service via l'agent
+        // On suppose que ton modèle User/Agent a une relation 'service'
+        $agent = \App\Models\Agent::with('service')->findOrFail($validated['agent_id']);
+        
+        // Sécurité : Vérifier que l'agent a bien un service
+        if (!$agent->service) {
+            return response()->json([
+                'message' => 'Cet agent n\'est rattaché à aucun service.',
+                'success' => false
+            ], 422);
+        }
+        
+        $serviceId = $agent->service->id;
+
+        // 3. Appel au Service avec l'agent ET son service automatique
+        $this->service->affecter($id, $agent->id, $serviceId, $validated['note'] ?? null);
+        
+        Cache::forget('courriers_stats');
+        
+        return $this->respondSuccess('Courrier affecté avec succès à ' . $agent->nom . ' (' . $agent->service->nom . ').');
+    });
+}
 
     // ========================================================================
     // ✅ MARQUER TRAITÉ : Workflow métier (AJAX)

@@ -71,8 +71,9 @@ Route::middleware(['auth', 'check.active'])->group(function () {
         Route::get('/',                   [CourrierController::class, 'index'])->name('index');
         Route::post('/',                  [CourrierController::class, 'store'])->name('store');
         Route::get('/{id}/edit',          [CourrierController::class, 'edit'])->name('edit');
-        Route::put('/{id}',               [CourrierController::class, 'update'])->name('update');
-        Route::get('/{id}',               [CourrierController::class, 'show'])->name('show');
+        
+        Route::post('/update/{id}', [CourrierController::class, 'update'])->name('courriers.update');
+        Route::get('/show/{id}',               [CourrierController::class, 'show'])->name('show');
         Route::delete('/{id}',            [CourrierController::class, 'destroy'])->name('destroy');
     });
 
