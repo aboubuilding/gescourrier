@@ -44,4 +44,9 @@ class Service extends Model
     {
         return $this->hasMany(Agent::class, 'service_id');
     }
+
+    public function courriers(): HasMany
+{
+    return $this->hasMany(Courrier::class, 'service_id');
+}
 }

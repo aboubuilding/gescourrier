@@ -95,21 +95,40 @@ Route::middleware(['auth', 'check.active'])->group(function () {
         Route::delete('/{id}',            [AgentController::class, 'destroy'])->name('destroy');
     });
 
-    // 🏢 Organisations
-    Route::prefix('organisations')->name('organisations.')->group(function () {
-        Route::get('/stats',              [OrganisationController::class, 'stats'])->name('stats');
-        Route::get('/api',                [OrganisationController::class, 'apiIndex'])->name('api');
-        Route::get('/export',             [OrganisationController::class, 'export'])->name('export');
-        
-        Route::post('/{id}/restaurer',    [OrganisationController::class, 'restaurer'])->name('restaurer');
 
-        Route::get('/',                   [OrganisationController::class, 'index'])->name('index');
-        Route::post('/',                  [OrganisationController::class, 'store'])->name('store');
-        Route::get('/{id}/edit',          [OrganisationController::class, 'edit'])->name('edit');
-        Route::put('/{id}',               [OrganisationController::class, 'update'])->name('update');
-        Route::get('/{id}',               [OrganisationController::class, 'show'])->name('show');
-        Route::delete('/{id}',            [OrganisationController::class, 'destroy'])->name('destroy');
-    });
+// 🏢 Organisations
+Route::prefix('organisations')->name('organisations.')->group(function () {
+    
+    // ==================================================
+    // 📋 Vues principales (existent dans le contrôleur)
+    // ==================================================
+    Route::get('/', [OrganisationController::class, 'index'])->name('index');
+    Route::post('/', [OrganisationController::class, 'store'])->name('store');
+    Route::get('/{id}/edit', [OrganisationController::class, 'edit'])->name('edit');
+    Route::get('/show/{id}', [OrganisationController::class, 'show'])->name('show');
+    Route::put('/{id}', [OrganisationController::class, 'update'])->name('update');
+    Route::delete('/{id}', [OrganisationController::class, 'destroy'])->name('destroy');
+    
+    // ==================================================
+    // 🔄 Actions sur le statut (existent dans le contrôleur)
+    // ==================================================
+    Route::put('/{id}/disable', [OrganisationController::class, 'disable'])->name('disable');
+    Route::put('/{id}/enable', [OrganisationController::class, 'enable'])->name('enable');
+    Route::post('/{id}/restaurer', [OrganisationController::class, 'restaurer'])->name('restaurer');
+    
+    // ==================================================
+    // 📊 Données et exports (existent dans le contrôleur)
+    // ==================================================
+    Route::get('/stats', [OrganisationController::class, 'stats'])->name('stats');
+    Route::get('/api', [OrganisationController::class, 'apiIndex'])->name('api');
+    Route::get('/search', [OrganisationController::class, 'search'])->name('search');
+    Route::get('/export', [OrganisationController::class, 'export'])->name('export');
+    
+    // ==================================================
+    // 📧 Courriers associés (existe dans le contrôleur)
+    // ==================================================
+    Route::get('/{id}/courriers', [OrganisationController::class, 'getCourriers'])->name('courriers');
+});
 
     // 📁 Services
     Route::prefix('services')->name('services.')->group(function () {

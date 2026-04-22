@@ -1,0 +1,311 @@
+/* ============================================
+   SERVICES PAGE - STYLES COMPLETS
+   Migration depuis Organisations
+   ============================================ */
+
+/* === VARIABLES ET RESET === */
+.services-page {
+    --success: #009a44;
+    --success-rgb: 0, 154, 68;
+    --warning: #f59e0b;
+    --warning-rgb: 245, 158, 11;
+    --danger: #dc2626;
+    --danger-rgb: 220, 38, 38;
+    --info: #3b82f6;
+    --info-rgb: 59, 130, 246;
+
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+
+    --bg-card: #ffffff;
+    --bg-hover: #f8fafc;
+    --border: #e2e8f0;
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+
+    --radius-lg: 12px;
+    --transition: all 0.2s ease;
+}
+
+/* === PAGE WRAPPER === */
+.services-page {
+    width: 100%;
+}
+
+/* === STATS GRID === */
+.services-page .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+/* === STAT CARD === */
+.services-page .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.services-page .stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--success);
+}
+
+/* === BAR COLOR (SERVICES) === */
+.services-page .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--success);
+    opacity: 0;
+    transition: 0.2s;
+}
+
+.services-page .stat-card:hover::after {
+    opacity: 1;
+}
+
+/* === ICONS === */
+.services-page .stat-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    background: var(--success);
+    color: #fff;
+}
+
+/* === VALUES === */
+.services-page .stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.services-page .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+/* === FILTER BAR === */
+.services-page .filter-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* === INPUTS === */
+.services-page .filter-input,
+.services-page .filter-select {
+    width: 100%;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px;
+    font-size: 13px;
+    background: var(--bg-hover);
+    transition: var(--transition);
+}
+
+.services-page .filter-input:focus,
+.services-page .filter-select:focus {
+    border-color: var(--success);
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(0,154,68,0.1);
+    outline: none;
+}
+
+/* === RESET BUTTON === */
+.services-page .btn-filter-reset {
+    background: var(--bg-hover);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.services-page .btn-filter-reset:hover {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+/* === TABLE PANEL === */
+.services-page .table-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+/* === HEADER TABLE === */
+.services-page .table-panel-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    background: var(--bg-hover);
+}
+
+.services-page .table-panel-title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* === DATATABLE === */
+.services-page .dataTable thead th {
+    background: var(--bg-hover) !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--success) !important;
+}
+
+.services-page .dataTable tbody tr:hover {
+    background: rgba(0,154,68,0.03) !important;
+}
+
+.services-page .dataTable tbody td {
+    padding: 12px 16px !important;
+    font-size: 13px;
+}
+
+/* === SERVICE CELL === */
+.services-page .service-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.services-page .service-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--success);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+/* === BADGES === */
+.services-page .badge-service {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+.services-page .badge-service.active {
+    background: var(--success);
+    color: #fff;
+}
+
+.services-page .badge-service.inactive {
+    background: var(--text-muted);
+    color: #fff;
+}
+
+/* === ACTION MENU === */
+.services-page .action-trigger {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.services-page .action-trigger:hover {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+/* === MODAL === */
+.services-page .modal-content {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.services-page .modal-header {
+    border-bottom: 1px solid var(--border);
+}
+
+.services-page .modal-title {
+    font-weight: 700;
+}
+
+/* === FORM === */
+.services-page .form-control,
+.services-page .form-select {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px;
+}
+
+.services-page .form-control:focus,
+.services-page .form-select:focus {
+    border-color: var(--success);
+    box-shadow: 0 0 0 4px rgba(0,154,68,0.1);
+}
+
+/* === ERROR === */
+.services-page .is-invalid {
+    border-color: var(--danger) !important;
+}
+
+.services-page .invalid-feedback {
+    color: var(--danger);
+    font-size: 11px;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .services-page .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .services-page .table-panel-head {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+/* === PRINT === */
+@media print {
+    .services-page .stats-grid,
+    .services-page .filter-bar {
+        display: none !important;
+    }
+}

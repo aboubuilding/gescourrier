@@ -22,42 +22,43 @@ class ServiceService
      * @param array $filtres Optionnels : nom, organisation_id
      */
     public function liste(array $filtres = []): array
-    {
-        $query = $this->repo->query()
-            ->where('etat', Service::ETAT_ACTIF)
-            ->with(['organisation'])
-            ->withCount('agents') // Compte les agents sans requête N+1
-            ->latest('nom');
+{
+    $query = $this->repo->query()
+        ->where('etat', Service::ETAT_ACTIF)
+       ->withCount([
+        'agents',
+        'courriers'
+    ])
+        ->orderByDesc('created_at')
+        ->orderByDesc('id');
 
-        // Filtres optionnels
-        !empty($filtres['nom']) && $query->where('nom', 'LIKE', "%{$filtres['nom']}%");
-        !empty($filtres['organisation_id']) && $query->where('organisation_id', $filtres['organisation_id']);
-
-        return $query->get()->map(fn($s) => $this->formatService($s))->toArray();
+    // Filtre sur le nom uniquement
+    if (isset($filtres['nom']) && trim($filtres['nom']) !== '') {
+        $nom = trim($filtres['nom']);
+        $query->where('nom', 'LIKE', "%{$nom}%");
     }
+
+    return $query->get()
+        ->map(fn($s) => $this->formatService($s))
+        ->toArray();
+}
 
     /**
      * Formate un service avec ses métadonnées et relations.
      */
     public function formatService(Service $service): array
-    {
-        $service->loadMissing(['organisation']);
+{
+    return [
+        'id' => (int) $service->id,
+        'nom' => (string) $service->nom,
 
-        return [
-            'id'          => $service->id,
-            'nom'         => $service->nom,
-            'organisation' => $service->organisation ? [
-                'id'    => $service->organisation->id,
-                'nom'   => $service->organisation->nom,
-                'sigle' => $service->organisation->sigle,
-            ] : null,
-            'agents_lies' => $service->agents_count ?? 0,
-            'etat'        => $service->etat === Service::ETAT_ACTIF ? 'actif' : 'inactif',
-            'created_at'  => $service->created_at?->format('Y-m-d H:i:s'),
-            'updated_at'  => $service->updated_at?->format('Y-m-d H:i:s'),
-        ];
-    }
+        'agents_lies' => (int) $service->agents_count,
+        'courriers_lies' => (int) $service->courriers_count,
 
+        'created_at' => $service->created_at?->format('Y-m-d H:i:s'),
+        'updated_at' => $service->updated_at?->format('Y-m-d H:i:s'),
+    ];
+}
     // ========================================================================
     // ➕ CRUD
     // ========================================================================
@@ -88,26 +89,64 @@ class ServiceService
         return $this->repo->rechercher($filtres);
     }
 
-    /**
-     * Retourne les services actifs d'une organisation donnée, formatés.
-     */
-    public function getByOrganisation(int $organisationId): array
-    {
-        return $this->repo->getByOrganisation($organisationId)
-            ->map(fn($s) => $this->formatService($s))
-            ->toArray();
-    }
+    
 
     /**
      * Retourne les statistiques pour le tableau de bord.
      */
     public function getStats(): array
-    {
-        return [
-            'total_actifs'       => $this->repo->query()->where('etat', Service::ETAT_ACTIF)->count(),
-            'total_inactifs'     => $this->repo->query()->where('etat', Service::ETAT_INACTIF)->count(),
-            'par_organisation'   => $this->repo->countByOrganisation(),
-            'agents_par_service' => $this->repo->countAgentsByService(),
-        ];
-    }
+{
+    $baseQuery = $this->repo->query()->withCount(['courriers', 'agents']);
+
+    // 🔢 Totaux
+    $totalActifs = (clone $this->repo->query())->count();
+
+    $totalInactifs = (clone $this->repo->query())
+        ->withoutGlobalScopes()
+        ->where('etat', Service::ETAT_INACTIF)
+        ->count();
+
+    // 📬 Services sans courrier
+    $servicesSansCourrier = (clone $baseQuery)
+        ->having('courriers_count', '=', 0)
+        ->count();
+
+    // 👨‍💼 Services sans agents
+    $servicesSansAgents = (clone $baseQuery)
+        ->having('agents_count', '=', 0)
+        ->count();
+
+    // 🏆 Service avec le plus de courriers
+    $topService = (clone $baseQuery)
+        ->orderByDesc('courriers_count')
+        ->first();
+
+    // 📊 Total courriers (via relation)
+    $totalCourriers = \App\Models\Courrier::count();
+
+    // 📈 Moyenne de courriers par service
+    $moyenneCourriers = $totalActifs > 0
+        ? round($totalCourriers / $totalActifs, 2)
+        : 0;
+
+    return [
+        'total_actifs' => $totalActifs,
+        'total_inactifs' => $totalInactifs,
+
+        'services_sans_courrier' => $servicesSansCourrier,
+        'services_sans_agents' => $servicesSansAgents,
+
+        'total_courriers' => $totalCourriers,
+        'moyenne_courriers_par_service' => $moyenneCourriers,
+
+        'top_service' => $topService ? [
+            'id' => $topService->id,
+            'nom' => $topService->nom,
+            'courriers' => $topService->courriers_count,
+        ] : null,
+
+        'par_organisation' => $this->repo->countByOrganisation(),
+        'agents_par_service' => $this->repo->countAgentsByService(),
+    ];
+}
 }

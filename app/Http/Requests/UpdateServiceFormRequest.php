@@ -4,10 +4,12 @@ namespace App\Http\Requests;
 
 use Illuminate\Validation\Rule;
 
-class ServiceFormRequest extends BaseFormRequest
+class UpdateServiceFormRequest extends BaseFormRequest
 {
     public function rules(): array
     {
+        $serviceId = $this->route('id'); // ou 'service' selon ton route binding
+
         return [
             // 🏢 Nom du service (obligatoire)
             'nom' => $this->conditionalRule('required|string|max:150'),
@@ -29,7 +31,7 @@ class ServiceFormRequest extends BaseFormRequest
             // 📧 Email
             'email' => $this->conditionalRule('nullable|email|max:150'),
 
-            // 🏢 Organisation (optionnelle)
+            // 🏢 Organisation
             'organisation_id' => $this->conditionalRule([
                 'nullable',
                 'integer',

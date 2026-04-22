@@ -1,114 +1,56 @@
 /**
- * FILTRES - Organisations
+ * organisations/filters.js
+ * Filtres sur le tableau organisations — compatible DataTable
  */
 
-let dataTable = null;
+function initOrganisationFilters() {
 
-function initFilters() {
-    // Initialiser la DataTable
-    dataTable = initDataTable();
-    
-    // Mettre à jour le compteur
-    updateCount();
-    
-    // Filtre de recherche
-    $('#searchInput').off('keyup').on('keyup', debounce(function() {
-        applyFilters();
-    }, 300));
-    
-    // Filtre par type (select)
-    $('#filterType').off('change').on('change', function() {
-        applyFilters();
-    });
-    
-    // Filtre par état
-    $('#filterEtat').off('change').on('change', function() {
-        applyFilters();
-    });
-    
-    // Filtre par pills
-    $('.type-pill').off('click').on('click', function() {
-        $('.type-pill').removeClass('active');
-        $(this).addClass('active');
-        applyFilters();
-    });
-    
+    // Si DataTable est actif, utiliser son API de recherche
+    function applyFilters() {
+        const search = ($('#searchOrganisation').val() || $('#tableSearch').val() || '').toLowerCase().trim();
+        const type   = $('#filterType').val()   || '';
+        const status = $('#filterEtat').val()   || '';
+
+        if (window.organisationTable) {
+            // Recherche globale DataTable
+            window.organisationTable.search(search);
+
+            // Filtres colonne via $.fn.dataTable.ext.search (si non déjà ajouté)
+            window.organisationTable.draw();
+        } else {
+            // Fallback : filtrage jQuery sur les lignes
+            $('#organisationsTable tbody tr').each(function () {
+                const $row       = $(this);
+                const rowSearch  = ($row.data('search') || $row.text()).toLowerCase();
+                const rowType    = String($row.data('type')   ?? '');
+                const rowStatus  = String($row.data('status') ?? '');
+
+                const matchSearch = !search || rowSearch.includes(search);
+                const matchType   = !type   || rowType === type;
+                const matchStatus = !status || rowStatus === status;
+
+                $row.toggle(matchSearch && matchType && matchStatus);
+            });
+            updateOrganisationCount();
+        }
+    }
+
+    // Écouter les champs de filtre
+    $('#searchOrganisation, #tableSearch, #filterType, #filterEtat').off('input change').on('input change', applyFilters);
+
     // Bouton reset
-    $('#btnResetFilters').off('click').on('click', function() {
-        resetFilters();
-    });
-}
-
-function applyFilters() {
-    const search = $('#searchInput').val().toLowerCase();
-    const type = $('.type-pill.active').data('type');
-    const filterType = $('#filterType').val();
-    const etat = $('#filterEtat').val();
-    
-    // Nettoyer les filtres existants
-    $.fn.dataTable.ext.search = [];
-    
-    // Ajouter le nouveau filtre
-    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-        const row = $(dataTable.row(dataIndex).node());
-        const rowType = String(row.data('type'));
-        const rowEtat = String(row.data('etat'));
-        
-        // Filtre type (priorité au pill)
-        let matchType = true;
-        if (type && type !== '') {
-            matchType = rowType === String(type);
-        } else if (filterType && filterType !== '') {
-            matchType = rowType === String(filterType);
+    $('#btnResetFilters').off('click').on('click', function () {
+        $('#searchOrganisation').val('');
+        $('#tableSearch').val('');
+        $('#filterType').val('');
+        $('#filterEtat').val('');
+        if (window.organisationTable) {
+            window.organisationTable.search('').draw();
+        } else {
+            applyFilters();
         }
-        
-        // Filtre état
-        let matchEtat = true;
-        if (etat && etat !== '') {
-            matchEtat = rowEtat === String(etat);
-        }
-        
-        return matchType && matchEtat;
     });
-    
-    // Appliquer la recherche
-    dataTable.search(search).draw();
-    updateCount();
-}
 
-function resetFilters() {
-    // Réinitialiser les champs
-    $('#searchInput').val('');
-    $('#filterType').val('');
-    $('#filterEtat').val('');
-    
-    // Réinitialiser les pills
-    $('.type-pill').removeClass('active');
-    $('.type-pill').first().addClass('active');
-    
-    // Nettoyer les filtres
-    $.fn.dataTable.ext.search = [];
-    
-    // Redessiner le tableau
-    dataTable.search('').draw();
-    updateCount();
-}
-
-function updateCount() {
-    const count = dataTable.rows({ search: 'applied' }).count();
-    const text = `${count} organisation${count !== 1 ? 's' : ''}`;
-    $('#tableCount').text(text);
-}
-
-// Debounce pour optimiser la recherche
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+    // Appliquer au chargement
+    applyFilters();
 }

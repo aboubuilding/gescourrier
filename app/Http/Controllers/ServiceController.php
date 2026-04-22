@@ -3,334 +3,327 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ServiceFormRequest;
+use App\Http\Requests\UpdateServiceFormRequest;
 use App\Services\ServiceService;
 use App\Models\Service;
-use App\Models\Organisation;
+use App\Models\Courrier;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Cache;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Log;
 
-/**
- * ServiceController
- * Gestion complète des services : vues Blade + API AJAX + exports + modals
- * Hérite de BaseController pour la gestion unifiée des réponses et erreurs.
- */
 class ServiceController extends BaseController
 {
     public function __construct(protected ServiceService $service)
     {
-        // Middleware d'autorisation par méthode
-        $this->middleware('role:admin,super_admin')->only(['store', 'update', 'destroy', 'restaurer']);
     }
 
-    // ========================================================================
-    // 📄 INDEX : Vue Blade + Données pour DataTables
-    // ========================================================================
 
-    public function index(Request $request): View
-    {
-        $filtres = $request->only(['organisation_id', 'nom', 'etat', 'search']);
-        
-        // Données pour la vue (paginées ou filtrées)
+
+public function index(Request $request): View
+{
+    try {
+        // =========================================================
+        // 1. FILTRES PROPREMENT NORMALISÉS
+        // =========================================================
+        $filtres = [
+            'search' => trim($request->input('search', '')),
+            'nom'    => trim($request->input('nom', '')),
+            'type'   => $request->input('type', null),
+            'etat'   => $request->input('etat', null),
+        ];
+
+        // Nettoyage des valeurs vides
+        $filtres = array_filter($filtres, fn ($v) => $v !== null && $v !== '');
+
+        // =========================================================
+        // 2. LISTE PRINCIPALE
+        // =========================================================
         $services = $this->service->liste($filtres);
-        
-        // Stats pour les KPI (avec cache 5 min)
-        $stats = Cache::remember('services_stats', 300, fn() => $this->service->getStats());
-        
-        // Données pour les selects des modals
-        $organisations = Organisation::where('etat', 1)->orderBy('nom')->get(['id', 'nom', 'sigle']);
-        
-        return view('services.index', compact('services', 'filtres', 'stats', 'organisations'));
+
+        // 🔥 Sécurisation des counts (évite ton erreur courante)
+        $services->loadCount([
+            'agents',
+            'courriers'
+        ]);
+
+        // =========================================================
+        // 3. STATS OPTIMISÉES (CACHE)
+        // =========================================================
+        $stats = Cache::remember('services_stats_v2', 300, function () {
+
+            return [
+                'total'        => \App\Models\Service::count(),
+                'actifs'       => \App\Models\Service::where('etat', 'actif')->count(),
+                'inactifs'     => \App\Models\Service::where('etat', 'inactif')->count(),
+
+                // si relation agents existe
+                'total_agents' => \App\Models\Agent::count(),
+            ];
+        });
+
+        // =========================================================
+        // 4. VARIABLE POUR MODAL (CORRECTION ERREUR "Undefined variable")
+        // =========================================================
+        $organisations = \App\Models\Organisation::select('id', 'nom')
+            ->orderBy('nom')
+            ->get();
+
+        // =========================================================
+        // 5. VIEW
+        // =========================================================
+        return view('services.index', [
+            'services'       => $services,
+            'filtres'        => $filtres,
+            'stats'          => $stats,
+            'organisations'  => $organisations, // 🔥 FIX ERREUR MODAL
+        ]);
+
+    } catch (\Throwable $e) {
+
+        Log::error('Erreur index services', [
+            'message' => $e->getMessage(),
+            'file'    => $e->getFile(),
+            'line'    => $e->getLine(),
+        ]);
+
+        return view('services.index', [
+            'services'      => collect(),
+            'filtres'       => [],
+            'stats'         => [
+                'total'        => 0,
+                'actifs'       => 0,
+                'inactifs'     => 0,
+                'total_agents' => 0,
+            ],
+            'organisations' => collect(), // 🔥 évite crash modal
+            'error'         => 'Erreur lors du chargement des services'
+        ]);
     }
+}
 
-    // ========================================================================
-    // 📡 API : Données JSON pour DataTables (Server-side processing)
-    // ========================================================================
-
+    // =========================================================
+    // 📡 API DATATABLES
+    // =========================================================
     public function apiIndex(Request $request): JsonResponse
     {
-        return $this->execute(function () use ($request) {
-            $query = $this->service->query()
-                ->with(['organisation'])
-                ->withCount('agents')
-                ->where('etat', Service::ETAT_ACTIF);
+        try {
+            return $this->execute(function () use ($request) {
 
-            // Recherche globale
-            if ($request->filled('search.value')) {
-                $search = $request->input('search.value');
-                $query->where(function($q) use ($search) {
-                    $q->where('nom', 'like', "%{$search}%")
-                      ->orWhereHas('organisation', fn($o) => $o->where('nom', 'like', "%{$search}%")
-                        ->orWhere('sigle', 'like', "%{$search}%"));
-                });
-            }
+                $query = Service::query()
+                    ->withCount(['agents', 'courriers']);
 
-            // Filtres par colonne (DataTables)
-            if ($request->filled('columns.1.search.value')) { // Organisation
-                $query->where('organisation_id', $request->input('columns.1.search.value'));
-            }
-            if ($request->filled('columns.3.search.value')) { // État
-                $query->where('etat', $request->input('columns.3.search.value'));
-            }
+                if ($request->filled('search.value')) {
+                    $search = $request->input('search.value');
 
-            // Tri
-            if ($request->filled('order.0.column')) {
-                $columnIndex = $request->input('order.0.column');
-                $dir = $request->input('order.0.dir', 'asc');
-                $columns = ['nom', 'organisation_id', 'created_at', 'etat'];
-                $query->orderBy($columns[$columnIndex] ?? 'nom', $dir);
-            } else {
-                $query->orderBy('nom');
-            }
+                    $query->where(function ($q) use ($search) {
+                        $q->where('nom', 'like', "%{$search}%")
+                          ->orWhereHas('organisation', fn($o) =>
+                              $o->where('nom', 'like', "%{$search}%")
+                          );
+                    });
+                }
 
-            // Pagination
-            $total = $query->count();
-            $filtered = $request->filled('search.value') 
-                ? (clone $query)->count() 
-                : $total;
-                
-            $services = $query
-                ->offset($request->input('start', 0))
-                ->limit($request->input('length', 15))
-                ->get();
+                $total = Service::count();
+                $filtered = (clone $query)->count();
+
+                $services = $query
+                    ->offset($request->input('start', 0))
+                    ->limit($request->input('length', 15))
+                    ->get();
+
+                return response()->json([
+                    'draw' => (int) $request->input('draw'),
+                    'recordsTotal' => $total,
+                    'recordsFiltered' => $filtered,
+                    'data' => $services->map(fn($s) => $this->service->formatService($s)),
+                ]);
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('API services error: ' . $e->getMessage());
 
             return response()->json([
-                'draw' => $request->input('draw', 1),
-                'recordsTotal' => $total,
-                'recordsFiltered' => $filtered,
-                'data' => $services->map(fn($s) => $this->service->formatService($s))
-            ]);
-        });
+                'message' => 'Erreur serveur API services'
+            ], 500);
+        }
     }
 
-    // ========================================================================
-    // 📥 STORE : Création (AJAX + Validation)
-    // ========================================================================
-
+    // =========================================================
+    // 📥 STORE
+    // =========================================================
     public function store(ServiceFormRequest $request): JsonResponse
     {
-        return $this->execute(function () use ($request) {
-            $validated = $request->validated();
-            
-            $service = $this->service->creer($validated);
-            
-            // Invalider le cache des stats
-            Cache::forget('services_stats');
-            
-            return $this->respondSuccess(
-                'Service créé avec succès.',
-                $this->service->formatService($service),
-                201
-            );
-        });
+        try {
+            return $this->execute(function () use ($request) {
+
+                $service = $this->service->creer($request->validated());
+
+                Cache::forget('services_stats');
+
+                return $this->respondSuccess(
+                    'Service créé avec succès.',
+                    $this->service->formatService($service),
+                    201
+                );
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Store service error: ' . $e->getMessage());
+
+            return $this->respondError('Erreur lors de la création du service');
+        }
     }
 
-    // ========================================================================
-    // ✏️ EDIT : Pré-remplissage du modal modification (JSON)
-    // ========================================================================
-
+    // =========================================================
+    // ✏️ EDIT
+    // =========================================================
     public function edit(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            $service = Service::findOrFail($id);
-            
-            // Formatage adapté pour le modal
-            $data = [
-                'id' => $service->id,
-                'nom' => $service->nom,
-                'organisation_id' => $service->organisation_id,
-                'etat' => $service->etat,
-                'created_at' => $service->created_at?->format('Y-m-d H:i'),
-                'updated_at' => $service->updated_at?->format('Y-m-d H:i'),
-            ];
-            
-            return $this->respondSuccess('Données récupérées.', $data);
-        });
+        try {
+            return $this->execute(function () use ($id) {
+
+                $service = Service::findOrFail($id);
+
+                return $this->respondSuccess('OK', [
+                    'id' => $service->id,
+                    'nom' => $service->nom,
+                ]);
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Edit service error: ' . $e->getMessage());
+
+            return $this->respondError('Service introuvable');
+        }
     }
 
-    // ========================================================================
-    // ✏️ UPDATE : Modification (AJAX)
-    // ========================================================================
-
-    public function update(ServiceFormRequest $request, int $id): JsonResponse
+    // =========================================================
+    // ✏️ UPDATE
+    // =========================================================
+    public function update(UpdateServiceFormRequest $request, int $id): JsonResponse
     {
-        return $this->execute(function () use ($request, $id) {
-            $service = $this->service->mettreAJour($id, $request->validated());
-            
-            Cache::forget('services_stats');
-            
-            return $this->respondSuccess(
-                'Service mis à jour avec succès.',
-                $this->service->formatService($service)
-            );
-        });
+        try {
+            return $this->execute(function () use ($request, $id) {
+
+                $service = $this->service->mettreAJour($id, $request->validated());
+
+                Cache::forget('services_stats');
+
+                return $this->respondSuccess(
+                    'Service mis à jour avec succès.',
+                    $this->service->formatService($service)
+                );
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Update service error: ' . $e->getMessage());
+
+            return $this->respondError('Erreur lors de la mise à jour');
+        }
     }
 
-    // ========================================================================
-    // 👁️ SHOW : Lecture détaillée (JSON)
-    // ========================================================================
-
+    // =========================================================
+    // 👁️ SHOW (🔥 COMPLET + SAFE)
+    // =========================================================
     public function show(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            // Note: Le scope global 'actif' s'applique par défaut
-            // Pour inclure les archives: Service::withoutGlobalScope('actif')->findOrFail($id)
-            $service = Service::with(['organisation'])->withCount('agents')->findOrFail($id);
-            return $this->respondSuccess('Service récupéré.', $this->service->formatService($service));
-        });
+        try {
+            return $this->execute(function () use ($id) {
+
+                $service = Service::with([
+                        'organisation',
+                        'agents' => fn($q) => $q->withCount('courriers')
+                    ])
+                    ->withCount(['agents', 'courriers'])
+                    ->findOrFail($id);
+
+                return $this->respondSuccess('Service récupéré.', [
+                    'id' => $service->id,
+                    'nom' => $service->nom,
+
+                    'total_agents' => $service->agents_count,
+                    'total_courriers' => $service->courriers_count,
+
+                    'agents' => $service->agents->map(fn($a) => [
+                        'id' => $a->id,
+                        'nom' => $a->nom,
+                        'courriers_affectes' => $a->courriers_count,
+                    ]),
+
+                    'top_agent' => $service->agents
+                        ->sortByDesc('courriers_count')
+                        ->first(),
+
+                    'agents_sans_courrier' => $service->agents
+                        ->where('courriers_count', 0)
+                        ->values()
+                        ->map(fn($a) => [
+                            'id' => $a->id,
+                            'nom' => $a->nom,
+                        ]),
+
+                    'courriers_par_statut' => Courrier::where('service_id', $service->id)
+                        ->selectRaw('statut, COUNT(*) as total')
+                        ->groupBy('statut')
+                        ->pluck('total', 'statut'),
+
+                    'created_at' => $service->created_at?->format('Y-m-d H:i:s'),
+                    'updated_at' => $service->updated_at?->format('Y-m-d H:i:s'),
+                ]);
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Show service error: ' . $e->getMessage());
+
+            return $this->respondError('Service introuvable ou erreur serveur');
+        }
     }
 
-    // ========================================================================
-    // 🗑️ DESTROY : Suppression logique / Archivage (AJAX)
-    // ========================================================================
-
+    // =========================================================
+    // 🗑️ DELETE
+    // =========================================================
     public function destroy(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            $this->service->supprimer($id);
-            Cache::forget('services_stats');
-            return $this->respondSuccess('Service désactivé (archivé) avec succès.');
-        });
+        try {
+            return $this->execute(function () use ($id) {
+
+                $this->service->supprimer($id);
+
+                Cache::forget('services_stats');
+
+                return $this->respondSuccess('Service supprimé.');
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Delete service error: ' . $e->getMessage());
+
+            return $this->respondError('Erreur lors de la suppression');
+        }
     }
 
-    // ========================================================================
-    // ♻️ RESTAURER : Réactivation (AJAX)
-    // ========================================================================
-
-    public function restaurer(int $id): JsonResponse
-    {
-        return $this->execute(function () use ($id) {
-            $this->service->restaurer($id);
-            Cache::forget('services_stats');
-            return $this->respondSuccess('Service réactivé avec succès.');
-        });
-    }
-
-    // ========================================================================
-    // 🏢 PAR ORGANISATION : Récupère les services d'une organisation (AJAX)
-    // ========================================================================
-
-    public function getByOrganisation(int $organisationId): JsonResponse
-    {
-        return $this->execute(function () use ($organisationId) {
-            $services = $this->service->getByOrganisation($organisationId);
-            return $this->respondSuccess('Services récupérés.', $services);
-        });
-    }
-
-    // ========================================================================
-    // 📤 EXPORT : Excel / CSV / PDF
-    // ========================================================================
-
-    public function export(Request $request): StreamedResponse
-    {
-        return $this->execute(function () use ($request) {
-            $format = $request->get('format', 'xlsx');
-            $filters = json_decode($request->get('filters', '{}'), true);
-            
-            // Récupérer les données filtrées
-            $query = $this->service->query()
-                ->with(['organisation'])
-                ->withCount('agents')
-                ->where('etat', Service::ETAT_ACTIF);
-            
-            // Appliquer les filtres
-            if (!empty($filters['organisation'])) $query->where('organisation_id', $filters['organisation']);
-            if (!empty($filters['etat'])) $query->where('etat', $filters['etat']);
-            if (!empty($filters['search'])) {
-                $query->where(function($q) use ($filters) {
-                    $q->where('nom', 'like', "%{$filters['search']}%")
-                      ->orWhereHas('organisation', fn($o) => $o->where('nom', 'like', "%{$filters['search']}%"));
-                });
-            }
-            
-            $services = $query->orderBy('nom')->get();
-            
-            return match($format) {
-                'pdf' => $this->exportPDF($services),
-                'csv' => $this->exportCSV($services),
-                default => $this->exportExcel($services),
-            };
-        });
-    }
-
-    // ── Helpers d'export ──
-    
-    protected function exportExcel($services): StreamedResponse
-    {
-        return response()->streamDownload(function() use ($services) {
-            $output = fopen('php://output', 'w');
-            
-            // En-têtes CSV avec séparateur point-virgule (Excel FR)
-            fputcsv($output, [
-                'Nom du service', 'Organisation', 'Sigle Orga', 
-                'Agents affectés', 'État', 'Date création'
-            ], ';');
-            
-            // Données
-            foreach ($services as $s) {
-                fputcsv($output, [
-                    $s->nom ?? '—',
-                    $s->organisation?->nom ?? '—',
-                    $s->organisation?->sigle ?? '—',
-                    $s->agents_count ?? 0,
-                    $s->etat == 1 ? 'Actif' : 'Inactif',
-                    $s->created_at?->format('d/m/Y H:i') ?? '—',
-                ], ';');
-            }
-            fclose($output);
-        }, 'services_export_'.date('Y-m-d_H-i').'.csv', [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
-    }
-
-    protected function exportCSV($services): StreamedResponse
-    {
-        return $this->exportExcel($services); // Même logique, extension différente
-    }
-
-    protected function exportPDF($services): StreamedResponse
-    {
-        // Si tu utilises dompdf ou snappy :
-        // $pdf = \PDF::loadView('services.export-pdf', compact('services'));
-        // return $pdf->download('services_'.date('Y-m-d').'.pdf');
-        
-        // Fallback : rediriger vers Excel si PDF non configuré
-        return $this->exportExcel($services);
-    }
-
-    // ========================================================================
-    // 📊 STATS : Dashboard (JSON avec cache)
-    // ========================================================================
-
+    // =========================================================
+    // 📊 STATS
+    // =========================================================
     public function stats(): JsonResponse
     {
-        return $this->execute(function () {
-            $stats = Cache::remember('services_stats', 300, fn() => $this->service->getStats());
-            return $this->respondSuccess('Statistiques chargées.', $stats);
-        });
-    }
+        try {
+            return $this->execute(function () {
 
-    // ========================================================================
-    // 🗂️ UTILITAIRES DEV
-    // ========================================================================
+                $stats = Cache::remember(
+                    'services_stats',
+                    300,
+                    fn() => $this->service->getStats()
+                );
 
-    /**
-     * Endpoint de test pour validation (dev only)
-     */
-    public function testValidation(Request $request): JsonResponse
-    {
-        if (!app()->environment('local')) {
-            return $this->respondError('Endpoint réservé au développement.', [], 403);
+                return $this->respondSuccess('OK', $stats);
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('Stats error: ' . $e->getMessage());
+
+            return $this->respondError('Erreur lors du chargement des stats');
         }
-
-        $request->validate([
-            'nom' => 'required|string|max:150',
-            'organisation_id' => 'required|exists:organisations,id',
-        ]);
-        
-        return $this->respondSuccess('Validation réussie.', $request->validated());
     }
 }

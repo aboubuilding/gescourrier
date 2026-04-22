@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\OrganisationFormRequest;
+use App\Http\Requests\UpdateOrganisationRequest;
 use App\Services\OrganisationService;
 use App\Models\Organisation;
 use App\Models\Service;
@@ -10,19 +11,43 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * OrganisationController
  * Gestion complète des organisations : vues Blade + API AJAX + exports + modals
- * Hérite de BaseController pour la gestion unifiée des réponses et erreurs.
  */
 class OrganisationController extends BaseController
 {
-    public function __construct(protected OrganisationService $service)
+    protected OrganisationService $service;
+    
+    // Types d'organisation
+    const TYPE_EXTERNE = 0;
+    const TYPE_INTERNE = 1;
+    const TYPE_GOUVERNEMENTALE = 2;
+    const TYPE_PRIVEE = 3;
+    const TYPE_ONG = 4;
+    
+    // États
+    const ETAT_ACTIF = 1;
+    const ETAT_INACTIF = 0;
+    
+    // Messages d'erreur
+    const ERROR_NOT_FOUND = "L'organisation demandée n'existe pas.";
+    const ERROR_DELETE = "Impossible de supprimer l'organisation car elle possède des courriers associés.";
+    const ERROR_UNIQUE = "Un organisation avec ce nom ou sigle existe déjà.";
+    const ERROR_SERVER = "Une erreur inattendue s'est produite. Veuillez réessayer.";
+
+    public function __construct(OrganisationService $service)
     {
-        // Middleware d'autorisation par méthode
-        $this->middleware('role:admin,super_admin')->only(['store', 'update', 'destroy', 'restaurer']);
+        $this->service = $service;
+        
+        // Middleware d'autorisation
+        $this->middleware('role:admin,super_admin')->only([
+            'store', 'update', 'destroy', 'restaurer', 'disable', 'enable'
+        ]);
     }
 
     // ========================================================================
@@ -31,15 +56,28 @@ class OrganisationController extends BaseController
 
     public function index(Request $request): View
     {
-        $filtres = $request->only(['type', 'etat', 'nom', 'sigle', 'search']);
-        
-        // Données pour la vue (paginées ou filtrées)
-        $organisations = $this->service->liste($filtres);
-        
-        // Stats pour les KPI (avec cache 5 min)
-        $stats = Cache::remember('organisations_stats', 300, fn() => $this->service->getStats());
-        
-        return view('organisations.index', compact('organisations', 'filtres', 'stats'));
+        try {
+            $filtres = $request->only(['type', 'status', 'search']);
+            
+            // Données pour la vue
+            $organisations = $this->service->liste($filtres);
+            
+            // Stats pour les KPI (cache 5 min)
+            $stats = Cache::remember('organisations_stats', 300, function() {
+                return $this->service->getStats();
+            });
+            
+            return view('organisations.index', compact('organisations', 'filtres', 'stats'));
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur index organisations: ' . $e->getMessage());
+            return view('organisations.index', [
+                'organisations' => collect([]),
+                'filtres' => [],
+                'stats' => $this->getEmptyStats(),
+                'error' => self::ERROR_SERVER
+            ]);
+        }
     }
 
     // ========================================================================
@@ -48,14 +86,14 @@ class OrganisationController extends BaseController
 
     public function apiIndex(Request $request): JsonResponse
     {
-        return $this->execute(function () use ($request) {
+        try {
             $query = $this->service->query()
-                ->withCount('services')
-                ->where('etat', Organisation::ETAT_ACTIF);
+                ->withCount('courriers')
+                ->orderBy('nom');
 
             // Recherche globale
-            if ($request->filled('search.value')) {
-                $search = $request->input('search.value');
+            if ($request->filled('search')) {
+                $search = $request->input('search');
                 $query->where(function($q) use ($search) {
                     $q->where('nom', 'like', "%{$search}%")
                       ->orWhere('sigle', 'like', "%{$search}%")
@@ -64,42 +102,44 @@ class OrganisationController extends BaseController
                 });
             }
 
-            // Filtres par colonne (DataTables)
-            if ($request->filled('columns.2.search.value')) { // Type
-                $query->where('type', $request->input('columns.2.search.value'));
+            // Filtres
+            if ($request->filled('type_filter')) {
+                $query->where('type', $request->input('type_filter'));
             }
-            if ($request->filled('columns.4.search.value')) { // État
-                $query->where('etat', $request->input('columns.4.search.value'));
+            
+            if ($request->filled('status_filter')) {
+                $status = $request->input('status_filter');
+                $query->where('is_active', $status === 'active' ? 1 : 0);
             }
 
             // Tri
-            if ($request->filled('order.0.column')) {
-                $columnIndex = $request->input('order.0.column');
-                $dir = $request->input('order.0.dir', 'asc');
-                $columns = ['nom', 'sigle', 'type', 'email', 'etat', 'created_at'];
-                $query->orderBy($columns[$columnIndex] ?? 'nom', $dir);
-            } else {
-                $query->orderBy('nom');
+            if ($request->filled('order_by')) {
+                $orderBy = $request->input('order_by');
+                $direction = $request->input('direction', 'asc');
+                $query->orderBy($orderBy, $direction);
             }
 
             // Pagination
-            $total = $query->count();
-            $filtered = $request->filled('search.value') 
-                ? (clone $query)->count() 
-                : $total;
-                
-            $organisations = $query
-                ->offset($request->input('start', 0))
-                ->limit($request->input('length', 15))
-                ->get();
+            $perPage = $request->input('per_page', 15);
+            $organisations = $query->paginate($perPage);
 
             return response()->json([
-                'draw' => $request->input('draw', 1),
-                'recordsTotal' => $total,
-                'recordsFiltered' => $filtered,
-                'data' => $organisations->map(fn($o) => $this->service->formatOrganisation($o))
+                'success' => true,
+                'data' => $organisations->items(),
+                'current_page' => $organisations->currentPage(),
+                'last_page' => $organisations->lastPage(),
+                'per_page' => $organisations->perPage(),
+                'total' => $organisations->total()
             ]);
-        });
+
+        } catch (\Exception $e) {
+            Log::error('Erreur apiIndex organisations: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     // ========================================================================
@@ -108,20 +148,51 @@ class OrganisationController extends BaseController
 
     public function store(OrganisationFormRequest $request): JsonResponse
     {
-        return $this->execute(function () use ($request) {
+        try {
+            DB::beginTransaction();
+            
             $validated = $request->validated();
+            $organisation = $this->service->creer($validated);
             
-            $org = $this->service->creer($validated);
+            DB::commit();
             
-            // Invalider le cache des stats
+            // Invalider le cache
             Cache::forget('organisations_stats');
             
-            return $this->respondSuccess(
-                'Organisation créée avec succès.',
-                $this->service->formatOrganisation($org),
-                201
-            );
-        });
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation créée avec succès.',
+                'data' => $this->formatOrganisationForResponse($organisation)
+            ], 201);
+            
+        } catch (\Illuminate\Database\QueryException $e) {
+            DB::rollBack();
+            Log::error('Erreur création organisation (DB): ' . $e->getMessage());
+            
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'message' => self::ERROR_UNIQUE,
+                    'errors' => ['nom' => [self::ERROR_UNIQUE]]
+                ], 422);
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la création de l\'organisation.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur création organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     // ========================================================================
@@ -130,179 +201,402 @@ class OrganisationController extends BaseController
 
     public function edit(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            $org = Organisation::findOrFail($id);
+        try {
+            $organisation = Organisation::findOrFail($id);
             
-            // Formatage adapté pour le modal
-            $data = [
-                'id' => $org->id,
-                'nom' => $org->nom,
-                'sigle' => $org->sigle,
-                'type' => $org->type,
-                'adresse' => $org->adresse,
-                'telephone' => $org->telephone,
-                'email' => $org->email,
-                'etat' => $org->etat,
-                'created_at' => $org->created_at?->format('Y-m-d H:i'),
-                'updated_at' => $org->updated_at?->format('Y-m-d H:i'),
-            ];
+            return response()->json([
+                'success' => true,
+                'message' => 'Données récupérées avec succès.',
+                'data' => [
+                    'id' => $organisation->id,
+                    'nom' => $organisation->nom,
+                    'sigle' => $organisation->sigle,
+                    'type' => $organisation->type,
+                    'adresse' => $organisation->adresse,
+                    'telephone' => $organisation->telephone,
+                    'email' => $organisation->email,
+                    'is_active' => $organisation->is_active,
+                    'created_at' => $organisation->created_at?->format('Y-m-d H:i:s'),
+                    'updated_at' => $organisation->updated_at?->format('Y-m-d H:i:s')
+                ]
+            ]);
             
-            return $this->respondSuccess('Données récupérées.', $data);
-        });
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::warning('Organisation non trouvée pour édition: ' . $id);
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur édition organisation: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     // ========================================================================
     // ✏️ UPDATE : Modification (AJAX)
     // ========================================================================
 
-    public function update(OrganisationFormRequest $request, int $id): JsonResponse
+    public function update(UpdateOrganisationRequest $request, int $id): JsonResponse
     {
-        return $this->execute(function () use ($request, $id) {
-            $org = $this->service->mettreAJour($id, $request->validated());
+        try {
+            DB::beginTransaction();
+            
+            $organisation = Organisation::findOrFail($id);
+            $validated = $request->validated();
+            $organisation->update($validated);
+            
+            DB::commit();
             
             Cache::forget('organisations_stats');
             
-            return $this->respondSuccess(
-                'Organisation mise à jour avec succès.',
-                $this->service->formatOrganisation($org)
-            );
-        });
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation mise à jour avec succès.',
+                'data' => $this->formatOrganisationForResponse($organisation)
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Illuminate\Database\QueryException $e) {
+            DB::rollBack();
+            Log::error('Erreur update organisation (DB): ' . $e->getMessage());
+            
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'message' => self::ERROR_UNIQUE,
+                    'errors' => ['sigle' => [self::ERROR_UNIQUE]]
+                ], 422);
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la mise à jour.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur update organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     // ========================================================================
-    // 👁️ SHOW : Lecture détaillée (JSON)
+    // 👁️ SHOW : Lecture détaillée avec courriers associés (JSON)
     // ========================================================================
 
     public function show(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            // Note: Le scope global 'actif' s'applique par défaut
-            // Pour inclure les archives: Organisation::withoutGlobalScope('actif')->findOrFail($id)
-            $org = Organisation::withCount('services')->findOrFail($id);
-            return $this->respondSuccess('Organisation récupérée.', $this->service->formatOrganisation($org));
-        });
+        try {
+            $organisation = Organisation::with(['courriers' => function($query) {
+                $query->orderBy('created_at', 'desc')->limit(50);
+            }])->findOrFail($id);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Détails de l\'organisation récupérés.',
+                'data' => [
+                    'id' => $organisation->id,
+                    'nom' => $organisation->nom,
+                    'sigle' => $organisation->sigle,
+                    'type' => $organisation->type,
+                    'type_label' => $this->getTypeLabel($organisation->type),
+                    'adresse' => $organisation->adresse,
+                    'telephone' => $organisation->telephone,
+                    'email' => $organisation->email,
+                    
+                    'courriers_count' => $organisation->courriers->count(),
+                    'courriers' => $organisation->courriers->map(function($c) {
+                        return [
+                            'id' => $c->id,
+                            'reference' => $c->reference,
+                            'objet' => $c->objet,
+                            'type' => $c->type,
+                            'priorite' => $c->priorite,
+                            'date_reception' => $c->date_reception,
+                            'date_envoi' => $c->date_envoi,
+                            'created_at' => $c->created_at?->format('d/m/Y')
+                        ];
+                    }),
+                    'created_at' => $organisation->created_at?->format('d/m/Y'),
+                    'created_at_full' => $organisation->created_at?->format('Y-m-d H:i:s')
+                ]
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur show organisation: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     // ========================================================================
-    // 🗑️ DESTROY : Suppression logique / Archivage (AJAX)
+    // 🗑️ DESTROY : Suppression (avec vérification des dépendances)
     // ========================================================================
 
     public function destroy(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            $this->service->supprimer($id);
+        try {
+            DB::beginTransaction();
+            
+            $organisation = Organisation::findOrFail($id);
+            
+            // Vérifier si l'organisation a des courriers
+            if ($organisation->courriers()->count() > 0) {
+                throw new \Exception(self::ERROR_DELETE);
+            }
+            
+            $organisation->delete();
+            
+            DB::commit();
+            
             Cache::forget('organisations_stats');
-            return $this->respondSuccess('Organisation désactivée (archivée) avec succès.');
-        });
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation supprimée définitivement.'
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur suppression organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage() === self::ERROR_DELETE 
+                    ? self::ERROR_DELETE 
+                    : self::ERROR_SERVER
+            ], $e->getMessage() === self::ERROR_DELETE ? 409 : 500);
+        }
     }
 
     // ========================================================================
-    // ♻️ RESTAURER : Réactivation (AJAX)
+    // 🔒 DISABLE : Désactiver une organisation
+    // ========================================================================
+
+    public function disable(int $id): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+            
+            $organisation = Organisation::findOrFail($id);
+            $organisation->update(['is_active' => false]);
+            
+            DB::commit();
+            
+            Cache::forget('organisations_stats');
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation désactivée avec succès.',
+                'data' => ['is_active' => false]
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur désactivation organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER
+            ], 500);
+        }
+    }
+
+    // ========================================================================
+    // 🔓 ENABLE : Réactiver une organisation
+    // ========================================================================
+
+    public function enable(int $id): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+            
+            $organisation = Organisation::findOrFail($id);
+            $organisation->update(['is_active' => true]);
+            
+            DB::commit();
+            
+            Cache::forget('organisations_stats');
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation réactivée avec succès.',
+                'data' => ['is_active' => true]
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur réactivation organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER
+            ], 500);
+        }
+    }
+
+    // ========================================================================
+    // ♻️ RESTAURER : Restaurer une organisation supprimée (soft delete)
     // ========================================================================
 
     public function restaurer(int $id): JsonResponse
     {
-        return $this->execute(function () use ($id) {
-            $this->service->restaurer($id);
+        try {
+            DB::beginTransaction();
+            
+            $organisation = Organisation::withTrashed()->findOrFail($id);
+            $organisation->restore();
+            
+            DB::commit();
+            
             Cache::forget('organisations_stats');
-            return $this->respondSuccess('Organisation réactivée avec succès.');
-        });
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation restaurée avec succès.'
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_NOT_FOUND
+            ], 404);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur restauration organisation: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER
+            ], 500);
+        }
     }
 
     // ========================================================================
-    // 📤 EXPORT : Excel / CSV / PDF
+    // 📤 EXPORT : Excel / CSV
     // ========================================================================
 
     public function export(Request $request): StreamedResponse
     {
-        return $this->execute(function () use ($request) {
-            $format = $request->get('format', 'xlsx');
+        try {
+            $format = $request->get('format', 'csv');
             $filters = json_decode($request->get('filters', '{}'), true);
             
             // Récupérer les données filtrées
-            $query = $this->service->query()
-                ->withCount('services')
-                ->where('etat', Organisation::ETAT_ACTIF);
+            $query = Organisation::query();
             
-            // Appliquer les filtres
-            if (!empty($filters['type'])) $query->where('type', $filters['type']);
-            if (!empty($filters['etat'])) $query->where('etat', $filters['etat']);
             if (!empty($filters['search'])) {
-                $query->where(function($q) use ($filters) {
-                    $q->where('nom', 'like', "%{$filters['search']}%")
-                      ->orWhere('sigle', 'like', "%{$filters['search']}%")
-                      ->orWhere('email', 'like', "%{$filters['search']}%");
+                $search = $filters['search'];
+                $query->where(function($q) use ($search) {
+                    $q->where('nom', 'like', "%{$search}%")
+                      ->orWhere('sigle', 'like', "%{$search}%");
                 });
+            }
+            
+            if (!empty($filters['type'])) {
+                $query->where('type', $filters['type']);
+            }
+            
+            if (!empty($filters['status'])) {
+                $query->where('is_active', $filters['status'] === 'active');
             }
             
             $organisations = $query->orderBy('nom')->get();
             
-            return match($format) {
-                'pdf' => $this->exportPDF($organisations),
-                'csv' => $this->exportCSV($organisations),
-                default => $this->exportExcel($organisations),
-            };
-        });
+            return $this->exportToCSV($organisations);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export organisations: ' . $e->getMessage());
+            
+            return response()->streamDownload(function() {
+                echo "Erreur lors de l'exportation des données";
+            }, 'error.csv', ['Content-Type' => 'text/csv']);
+        }
     }
 
-    // ── Helpers d'export ──
-    
-    protected function exportExcel($organisations): StreamedResponse
+    protected function exportToCSV($organisations): StreamedResponse
     {
         return response()->streamDownload(function() use ($organisations) {
-            $output = fopen('php://output', 'w');
+            $handle = fopen('php://output', 'w');
             
-            // En-têtes CSV avec séparateur point-virgule (Excel FR)
-            fputcsv($output, [
+            // En-têtes UTF-8 avec BOM pour Excel
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            // En-têtes
+            fputcsv($handle, [
                 'Nom', 'Sigle', 'Type', 'Email', 'Téléphone', 
-                'Adresse', 'Services liés', 'État', 'Date création'
+                'Adresse', 'Statut', 'Nombre courriers', 'Date création'
             ], ';');
             
             // Données
-            foreach ($organisations as $o) {
-                fputcsv($output, [
-                    $o->nom ?? '—',
-                    $o->sigle ?? '—',
-                    $this->getTypeLabel($o->type),
-                    $o->email ?? '—',
-                    $o->telephone ?? '—',
-                    $o->adresse ?? '—',
-                    $o->services_count ?? 0,
-                    $o->etat == 1 ? 'Actif' : 'Inactif',
-                    $o->created_at?->format('d/m/Y H:i') ?? '—',
+            foreach ($organisations as $org) {
+                fputcsv($handle, [
+                    $org->nom ?? '—',
+                    $org->sigle ?? '—',
+                    $this->getTypeLabel($org->type),
+                    $org->email ?? '—',
+                    $org->telephone ?? '—',
+                    $org->adresse ?? '—',
+                    $org->is_active ? 'Actif' : 'Inactif',
+                    $org->courriers()->count(),
+                    $org->created_at?->format('d/m/Y H:i') ?? '—',
                 ], ';');
             }
-            fclose($output);
-        }, 'organisations_export_'.date('Y-m-d_H-i').'.csv', [
+            
+            fclose($handle);
+        }, 'organisations_' . date('Y-m-d_H-i') . '.csv', [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
-    }
-
-    protected function exportCSV($organisations): StreamedResponse
-    {
-        return $this->exportExcel($organisations); // Même logique, extension différente
-    }
-
-    protected function exportPDF($organisations): StreamedResponse
-    {
-        // Si tu utilises dompdf ou snappy :
-        // $pdf = \PDF::loadView('organisations.export-pdf', compact('organisations'));
-        // return $pdf->download('organisations_'.date('Y-m-d').'.pdf');
-        
-        // Fallback : rediriger vers Excel si PDF non configuré
-        return $this->exportExcel($organisations);
-    }
-
-    protected function getTypeLabel(?int $type): string
-    {
-        return match($type) {
-            0 => 'Externe',
-            1 => 'Interne',
-            2 => 'Gouvernementale',
-            3 => 'Privée',
-            4 => 'ONG',
-            default => '—',
-        };
     }
 
     // ========================================================================
@@ -311,31 +605,120 @@ class OrganisationController extends BaseController
 
     public function stats(): JsonResponse
     {
-        return $this->execute(function () {
-            $stats = Cache::remember('organisations_stats', 300, fn() => $this->service->getStats());
-            return $this->respondSuccess('Statistiques chargées.', $stats);
-        });
+        try {
+            $stats = Cache::remember('organisations_stats', 300, function() {
+                return [
+                    'total' => Organisation::count(),
+                    'active' => Organisation::where('is_active', true)->count(),
+                    'inactive' => Organisation::where('is_active', false)->count(),
+                    'by_type' => [
+                        'externe' => Organisation::where('type', self::TYPE_EXTERNE)->count(),
+                        'interne' => Organisation::where('type', self::TYPE_INTERNE)->count(),
+                        'gouvernementale' => Organisation::where('type', self::TYPE_GOUVERNEMENTALE)->count(),
+                        'privee' => Organisation::where('type', self::TYPE_PRIVEE)->count(),
+                        'ong' => Organisation::where('type', self::TYPE_ONG)->count(),
+                    ]
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $stats
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur stats organisations: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => self::ERROR_SERVER,
+                'data' => $this->getEmptyStats()
+            ], 500);
+        }
     }
 
     // ========================================================================
-    // 🗂️ UTILITAIRES DEV
+    // 🔍 RECHERCHE RAPIDE (Autocomplete)
     // ========================================================================
 
-    /**
-     * Endpoint de test pour validation (dev only)
-     */
-    public function testValidation(Request $request): JsonResponse
+    public function search(Request $request): JsonResponse
     {
-        if (!app()->environment('local')) {
-            return $this->respondError('Endpoint réservé au développement.', [], 403);
+        try {
+            $term = $request->get('q', '');
+            
+            if (strlen($term) < 2) {
+                return response()->json(['results' => []]);
+            }
+            
+            $organisations = Organisation::where('is_active', true)
+                ->where(function($query) use ($term) {
+                    $query->where('nom', 'like', "%{$term}%")
+                          ->orWhere('sigle', 'like', "%{$term}%");
+                })
+                ->limit(10)
+                ->get();
+            
+            return response()->json([
+                'results' => $organisations->map(function($org) {
+                    return [
+                        'id' => $org->id,
+                        'text' => $org->nom . ($org->sigle ? " ({$org->sigle})" : '')
+                    ];
+                })
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur search organisations: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
         }
+    }
 
-        $request->validate([
-            'nom' => 'required|string|max:150',
-            'sigle' => 'nullable|string|max:20|unique:organisations,sigle',
-            'type' => 'required|integer|in:0,1,2,3,4',
-        ]);
-        
-        return $this->respondSuccess('Validation réussie.', $request->validated());
+    // ========================================================================
+    // 🗂️ UTILITAIRES PRIVÉS
+    // ========================================================================
+
+    protected function formatOrganisationForResponse(Organisation $organisation): array
+    {
+        return [
+            'id' => $organisation->id,
+            'nom' => $organisation->nom,
+            'sigle' => $organisation->sigle,
+            'type' => $organisation->type,
+            'type_label' => $this->getTypeLabel($organisation->type),
+            'adresse' => $organisation->adresse,
+            'telephone' => $organisation->telephone,
+            'email' => $organisation->email,
+            
+            'courriers_count' => $organisation->courriers()->count(),
+            'created_at' => $organisation->created_at?->format('d/m/Y H:i')
+        ];
+    }
+
+    protected function getTypeLabel(?int $type): string
+    {
+        return match($type) {
+            self::TYPE_EXTERNE => 'Externe',
+            self::TYPE_INTERNE => 'Interne',
+            self::TYPE_GOUVERNEMENTALE => 'Gouvernementale',
+            self::TYPE_PRIVEE => 'Privée',
+            self::TYPE_ONG => 'ONG',
+            default => 'Non défini',
+        };
+    }
+
+    protected function getEmptyStats(): array
+    {
+        return [
+            'total' => 0,
+            'active' => 0,
+            'inactive' => 0,
+            'by_type' => [
+                'externe' => 0,
+                'interne' => 0,
+                'gouvernementale' => 0,
+                'privee' => 0,
+                'ong' => 0,
+            ]
+        ];
     }
 }

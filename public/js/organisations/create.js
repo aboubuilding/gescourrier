@@ -1,226 +1,188 @@
 /**
- * CRÉATION D'ORGANISATION
- * Gère le modal de création et l'envoi du formulaire
+ * organisations/create.js
+ * Gestion du Modal Création Organisation
+ * IDs corrigés pour correspondre au Blade : orgNom, orgSigle, orgType, etc.
  */
 
-function initCreateModal() {
-    // Réinitialiser le formulaire quand le modal s'ouvre
-    $('#modalCreate').on('show.bs.modal', function() {
-        resetCreateForm();
-    });
-    
-    // Nettoyer quand le modal se ferme
-    $('#modalCreate').on('hidden.bs.modal', function() {
-        resetCreateForm();
-    });
-    
-    // Soumission du formulaire
-    $('#formCreate').off('submit').on('submit', function(e) {
-        e.preventDefault();
-        submitCreateForm($(this));
-    });
-}
+function initCreateOrganisationModal() {
 
-/**
- * Réinitialiser le formulaire de création
- */
-function resetCreateForm() {
-    // Réinitialiser les champs
-    $('#formCreate')[0].reset();
-    
-    // Effacer les erreurs de validation
-    clearValidationErrors();
-    
-    // Réinitialiser l'état du bouton
-    const $btn = $('#btnSubmitCreate');
-    const $spinner = $('#spinnerCreate');
-    $btn.prop('disabled', false);
-    $spinner.addClass('d-none');
-    
-    // Retirer les classes d'erreur des champs
-    $('#formCreate .is-invalid').removeClass('is-invalid');
-    $('#formCreate .invalid-feedback').remove();
-}
+    // ─────────────────────────────────────
+    // UTILITAIRES
+    // ─────────────────────────────────────
 
-/**
- * Soumettre le formulaire de création
- * @param {jQuery} $form - Le formulaire à soumettre
- */
-function submitCreateForm($form) {
-    const $btn = $('#btnSubmitCreate');
-    const $spinner = $('#spinnerCreate');
-    
-    // Effacer les erreurs précédentes
-    clearValidationErrors();
-    
-    // Désactiver le bouton et afficher le spinner
-    toggleButtonLoading($btn, $spinner, true);
-    
-    // Récupérer les données du formulaire
-    const formData = $form.serialize();
-    const actionUrl = $form.attr('action');
-    
-    // Envoyer la requête AJAX
-    $.ajax({
-        url: actionUrl,
-        method: 'POST',
-        data: formData,
-        headers: {
-            'X-CSRF-TOKEN': getCsrfToken()
-        },
-        success: function(response) {
-            handleCreateSuccess(response);
-        },
-        error: function(xhr) {
-            handleCreateError(xhr);
-        },
-        complete: function() {
-            // Réactiver le bouton et cacher le spinner
-            toggleButtonLoading($btn, $spinner, false);
+    function clearFieldError($field) {
+        $field.removeClass('is-invalid');
+        $field.next('.field-error').remove();
+        const $wrapper = $field.closest('.select-wrapper');
+        if ($wrapper.length) {
+            $wrapper.find('.select-icon').css('color', '');
+            $wrapper.next('.field-error').remove();
         }
-    });
-}
-
-/**
- * Gérer la réponse de succès
- * @param {Object} response - La réponse du serveur
- */
-function handleCreateSuccess(response) {
-    // Afficher le message de succès
-    const message = response.message || 'Organisation créée avec succès';
-    showToast('success', message);
-    
-    // Fermer le modal
-    $('#modalCreate').modal('hide');
-    
-    // Recharger la page après un court délai
-    setTimeout(() => {
-        location.reload();
-    }, 800);
-}
-
-/**
- * Gérer les erreurs de création
- * @param {Object} xhr - L'objet XMLHttpRequest
- */
-function handleCreateError(xhr) {
-    // Gestion des erreurs de validation (422)
-    if (xhr.status === 422 && xhr.responseJSON?.errors) {
-        // Afficher les erreurs sous les champs concernés
-        showValidationErrors(xhr.responseJSON.errors);
-        
-        // Afficher un message d'erreur global
-        showToast('error', 'Veuillez corriger les erreurs dans le formulaire');
-        
-        // Scroll vers la première erreur
-        const firstError = $('.is-invalid').first();
-        if (firstError.length) {
-            $('html, body').animate({
-                scrollTop: firstError.offset().top - 100
-            }, 500);
-        }
-    } 
-    // Gestion des erreur de serveur (500)
-    else if (xhr.status === 500) {
-        const message = xhr.responseJSON?.message || 'Erreur serveur lors de la création';
-        showToast('error', message);
-        console.error('Erreur serveur:', xhr.responseJSON);
     }
-    // Gestion des autres erreurs
-    else {
-        const message = xhr.responseJSON?.message || 'Erreur lors de la création de l\'organisation';
-        showToast('error', message);
-    }
-}
 
-/**
- * Récupérer le token CSRF
- * @returns {string}
- */
-function getCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-}
-
-/**
- * Afficher une notification toast
- * @param {string} type - Type de notification (success, error, warning, info)
- * @param {string} message - Message à afficher
- */
-function showToast(type, message) {
-    if (typeof toastr !== 'undefined') {
-        toastr[type](message);
-    } else {
-        alert(message);
-    }
-}
-
-/**
- * Afficher les erreurs de validation sous les champs
- * @param {Object} errors - Objet contenant les erreurs
- */
-function showValidationErrors(errors) {
-    // Supprimer les anciennes erreurs
-    $('.is-invalid').removeClass('is-invalid');
-    $('.invalid-feedback').remove();
-    
-    // Parcourir chaque champ en erreur
-    Object.keys(errors).forEach(field => {
-        const $field = $(`[name="${field}"]`);
-        if ($field.length) {
-            // Ajouter la classe d'erreur
-            $field.addClass('is-invalid');
-            
-            // Récupérer le premier message d'erreur
-            const message = Array.isArray(errors[field]) ? errors[field][0] : errors[field];
-            
-            // Créer l'élément d'erreur
-            const $error = $(`<div class="invalid-feedback">${message}</div>`);
-            
-            // Insérer après le champ
+    function showFieldError($field, message) {
+        clearFieldError($field);
+        $field.addClass('is-invalid');
+        const $wrapper = $field.closest('.select-wrapper');
+        const $error = $(`<div class="field-error text-danger small mt-1">⚠ ${message}</div>`);
+        if ($wrapper.length) {
+            $wrapper.find('.select-icon').css('color', '#dc3545');
+            $wrapper.after($error);
+        } else {
             $field.after($error);
-            
-            // Pour les selects avec Select2
-            if ($field.hasClass('select2-hidden-accessible')) {
-                $field.next('.select2-container').find('.select2-selection').addClass('is-invalid');
+        }
+    }
+
+    function clearAllErrors() {
+        $('#formCreateOrganisation .is-invalid').removeClass('is-invalid');
+        $('#formCreateOrganisation .field-error').remove();
+        $('#formCreateOrganisation .select-icon').css('color', '');
+    }
+
+    function validateForm() {
+        let isValid = true;
+
+        // ✅ Correction : utiliser les IDs du Blade (orgNom, orgSigle, etc.)
+        const nom = $('#orgNom').val()?.trim() ?? '';
+        if (!nom) {
+            showFieldError($('#orgNom'), "Le nom de l'organisation est requis");
+            isValid = false;
+        } else if (nom.length > 150) {
+            showFieldError($('#orgNom'), "Le nom ne doit pas dépasser 150 caractères");
+            isValid = false;
+        }
+
+        const sigle = $('#orgSigle').val()?.trim() ?? '';
+        if (sigle && sigle.length > 20) {
+            showFieldError($('#orgSigle'), "Le sigle ne doit pas dépasser 20 caractères");
+            isValid = false;
+        }
+
+        const type = $('#orgType').val();
+        if (type === '' || type === null || type === undefined) {
+            showFieldError($('#orgType'), "Le type d'organisation est requis");
+            isValid = false;
+        }
+
+        const adresse = $('#orgAdresse').val() ?? '';
+        if (adresse && adresse.length > 255) {
+            showFieldError($('#orgAdresse'), "L'adresse ne doit pas dépasser 255 caractères");
+            isValid = false;
+        }
+
+        const telephone = $('#orgTelephone').val()?.trim() ?? '';
+        if (telephone && telephone.length > 20) {
+            showFieldError($('#orgTelephone'), "Le téléphone ne doit pas dépasser 20 caractères");
+            isValid = false;
+        }
+
+        const email = $('#orgEmail').val()?.trim() ?? '';
+        if (email) {
+            const emailRegex = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;
+            if (!emailRegex.test(email)) {
+                showFieldError($('#orgEmail'), "Veuillez saisir une adresse email valide");
+                isValid = false;
+            } else if (email.length > 150) {
+                showFieldError($('#orgEmail'), "L'email ne doit pas dépasser 150 caractères");
+                isValid = false;
             }
         }
+
+        return isValid;
+    }
+
+    // ─────────────────────────────────────
+    // ÉVÉNEMENTS
+    // ─────────────────────────────────────
+
+    // Nettoyage live des erreurs
+    $(document).on('input change', '#formCreateOrganisation input, #formCreateOrganisation select', function () {
+        clearFieldError($(this));
+    });
+
+    // Reset à l'ouverture
+    $('#modalCreateOrganisation').off('show.bs.modal').on('show.bs.modal', function () {
+        resetCreateOrganisationForm();
+    });
+
+    // Reset à la fermeture
+    $('#modalCreateOrganisation').off('hidden.bs.modal').on('hidden.bs.modal', function () {
+        resetCreateOrganisationForm();
+    });
+
+    // Soumission
+    $('#formCreateOrganisation').off('submit').on('submit', function (e) {
+        e.preventDefault();
+
+        clearAllErrors();
+        if (!validateForm()) {
+            const $first = $('.is-invalid').first();
+            if ($first.length) $('html, body').animate({ scrollTop: $first.offset().top - 100 }, 300);
+            return;
+        }
+
+        const $btn     = $('#btnSubmitCreateOrg'); // ✅ ID correct du bouton
+        const origHtml = $btn.html();
+        $btn.html('<i class="fas fa-spinner fa-spin me-1"></i> Création...').prop('disabled', true);
+
+        $.ajax({
+            url:         $(this).attr('action'),
+            method:      'POST',
+            data:        new FormData(this),
+            processData: false,
+            contentType: false,
+            headers:     { 'X-CSRF-TOKEN': window.CSRF_TOKEN },
+            success: function (res) {
+                if (res.success) {
+                    if (typeof window.showNotification === 'function') {
+                        window.showNotification(res.message || 'Organisation créée avec succès', 'success');
+                    }
+                    $('#modalCreateOrganisation').modal('hide');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    if (typeof window.showNotification === 'function') {
+                        window.showNotification(res.message || 'Erreur lors de la création', 'error');
+                    }
+                }
+            },
+            error: function (xhr) {
+                if (xhr.status === 422 && xhr.responseJSON?.errors) {
+                    $.each(xhr.responseJSON.errors, function (field, messages) {
+                        // ✅ Mapping des champs vers les IDs du Blade
+                        const map = {
+                            nom: '#orgNom', 
+                            sigle: '#orgSigle', 
+                            type: '#orgType',
+                            adresse: '#orgAdresse', 
+                            telephone: '#orgTelephone', 
+                            email: '#orgEmail'
+                        };
+                        const $field = $(map[field] || `[name="${field}"]`);
+                        if ($field.length) showFieldError($field, messages[0]);
+                        else if (typeof window.showNotification === 'function') {
+                            window.showNotification(messages[0], 'error');
+                        }
+                    });
+                    const $first = $('.is-invalid').first();
+                    if ($first.length) $('html, body').animate({ scrollTop: $first.offset().top - 100 }, 300);
+                } else {
+                    const msg = xhr.responseJSON?.message || "Erreur lors de la création de l'organisation";
+                    if (typeof window.showNotification === 'function') {
+                        window.showNotification(msg, 'error');
+                    }
+                }
+            },
+            complete: function () {
+                $btn.html(origHtml).prop('disabled', false);
+            }
+        });
     });
 }
 
-/**
- * Effacer toutes les erreurs de validation
- */
-function clearValidationErrors() {
-    $('.is-invalid').removeClass('is-invalid');
-    $('.invalid-feedback').remove();
-    
-    // Pour Select2
-    $('.select2-container .select2-selection').removeClass('is-invalid');
+function resetCreateOrganisationForm() {
+    const form = document.getElementById('formCreateOrganisation');
+    if (form) form.reset();
+    $('#formCreateOrganisation .is-invalid').removeClass('is-invalid');
+    $('#formCreateOrganisation .field-error').remove();
+    $('#formCreateOrganisation .select-icon').css('color', '');
 }
-
-/**
- * Gérer l'état de chargement d'un bouton
- * @param {jQuery} $btn - Le bouton
- * @param {jQuery} $spinner - L'élément spinner
- * @param {boolean} isLoading - État de chargement
- */
-function toggleButtonLoading($btn, $spinner, isLoading) {
-    if (isLoading) {
-        $btn.prop('disabled', true);
-        $spinner.removeClass('d-none');
-        $btn.data('original-text', $btn.html());
-        $btn.html('<span class="spinner-border spinner-border-sm me-1"></span> Création en cours...');
-    } else {
-        $btn.prop('disabled', false);
-        $spinner.addClass('d-none');
-        if ($btn.data('original-text')) {
-            $btn.html($btn.data('original-text'));
-        }
-    }
-}
-
-// Exposer les fonctions globalement pour une utilisation dans d'autres scripts
-window.organisationsCreate = {
-    resetForm: resetCreateForm,
-    submitForm: submitCreateForm
-};
