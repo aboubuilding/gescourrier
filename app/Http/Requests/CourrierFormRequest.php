@@ -23,6 +23,7 @@ class CourrierFormRequest extends FormRequest
             'numero' => 'nullable|string|max:255',
             'organisation_id' => 'required|exists:organisations,id',
             'objet' => 'required|string|max:500',
+            'description' => 'nullable|string|max:1000',
             'date_reception' => 'nullable|date',
             'date_envoi' => 'nullable|date',
             'fichier' => 'nullable|file|max:5120|mimes:pdf,jpg,jpeg,png',
@@ -37,7 +38,7 @@ class CourrierFormRequest extends FormRequest
             'priorite.required' => 'La priorité est requise.',
             'organisation_id.required' => 'L\'expéditeur est requis.',
             'organisation_id.exists' => 'L\'organisation sélectionnée n\'existe pas.',
-            'objet.required' => 'L\'objet du courrier est requis.',
+            'objet.required' => 'L\'objet du courrier est requis.', 
             'fichier.max' => 'Le fichier ne doit pas dépasser 5 Mo.',
             'fichier.mimes' => 'Le fichier doit être de type PDF, JPG, JPEG ou PNG.',
         ];

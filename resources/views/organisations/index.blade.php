@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Organisations')
-@section('page_title', 'Gestion des Organisations')
+@section('title', 'Expediteurs')
+@section('page_title', 'Gestion des Expediteurs')
 @section('page_icon', 'fa-sitemap')
 
 @section('breadcrumb')
     <li><a href="{{ route('dashboard.index') }}">Accueil</a></li>
     <li>Administration</li>
-    <li>Organisations</li>
+    <li>Expediteurs</li>
 @endsection
 
 @section('page_actions')
@@ -16,7 +16,7 @@
             <i class="fas fa-download"></i> <span class="d-none d-sm-inline">Exporter</span>
         </button>
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalCreateOrganisation">
-            <i class="fas fa-plus-circle"></i> <span class="d-none d-sm-inline">Nouvelle organisation</span>
+            <i class="fas fa-plus-circle"></i> <span class="d-none d-sm-inline">Nouvelle Expediteurs</span>
         </button>
     </div>
 @endsection

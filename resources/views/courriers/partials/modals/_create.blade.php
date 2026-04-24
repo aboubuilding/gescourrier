@@ -31,9 +31,8 @@
                             <div class="select-wrapper">
                                 <select name="type" id="createType" class="input-slim" required>
                                     <option value="">Sélectionner</option>
-                                    <option value="0">📥 Entrant</option>
-                                    <option value="1">📤 Sortant</option>
-                                    <option value="2">🔄 Interne</option>
+                                    <option value="0">📥 ARRIVE</option>
+                                    <option value="1">📤 DEPART</option>    
                                 </select>
                                 <i class="fas fa-chevron-down select-icon"></i>
                             </div>
@@ -97,6 +96,15 @@
                             <input type="text" name="objet" class="input-slim" placeholder="Saisir l'objet du courrier" required>
                         </div>
 
+                       {{-- Description --}}
+                        <div class="col-12">
+                            <label class="form-label-slim">
+                                <i class="fas fa-heading me-1"></i>Description(reunion,atelier etc..) 
+                                <span class="text-danger"></span>
+                            </label>
+                            <input type="text" name="description" class="input-slim" placeholder="Saisir la description du courrier">
+                        </div>
+
                         {{-- Dates --}}
                         <div class="col-md-6 date-reception-field">
                             <label class="form-label-slim">
@@ -121,7 +129,7 @@
                                 <div class="dropzone-icon">
                                     <i class="fas fa-cloud-upload-alt"></i>
                                 </div>
-                                <p class="dropzone-title">Glissez-déposez ou cliquez pour choisir</p>
+                               <p class="dropzone-title">Glissez-déposez ou cliquez pour choisir</p>
                                 <p class="dropzone-hint">PDF, JPG, PNG — Max 5 Mo</p>
                                 <input type="file" name="fichier" id="fileInputModern" accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
                             </div>

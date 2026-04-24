@@ -15,8 +15,9 @@
             <thead class="bg-light">
                 <tr>
                     <th class="border-0 ps-3">Identification</th>
-                    <th class="border-0">Objet & Organisation</th>
+                    <th class="border-0">Objet & Expediteur</th>
                     <th class="border-0">Classification</th>
+                    <th class="border-0">Description</th>
                     <th class="border-0">Assignation</th>
                     <th class="border-0">Pièce Jointe</th>
                     <th class="border-0 text-end pe-3">Actions</th>
@@ -31,8 +32,8 @@
                     
                     // Configuration des types de courrier
                     $typeConfig = [
-                        '0' => ['label' => 'Entrant', 'icon' => 'fa-arrow-down', 'color' => '#3b82f6'],
-                        '1' => ['label' => 'Sortant', 'icon' => 'fa-arrow-up', 'color' => '#10b981'],
+                        '0' => ['label' => 'ARRIVE', 'icon' => 'fa-arrow-down', 'color' => '#3b82f6'],
+                        '1' => ['label' => 'DEPART', 'icon' => 'fa-arrow-up', 'color' => '#10b981'],
                         '2' => ['label' => 'Interne', 'icon' => 'fa-arrow-right-left', 'color' => '#f59e0b'],
                     ];
                     $typeCode = $c['type']['code'] ?? $c['type'] ?? '0';
@@ -105,7 +106,14 @@
                         </div>
                     </td>
 
-                    {{-- COLONNE 4: ASSIGNATION (Service + Agent) --}}
+                    {{-- COLONNE 4: DESCRIPTION (description) //description des courier REUNION OU ATELIER--}} 
+
+                    <td>
+                        <div class="small text-dark text-truncate" style="max-width: 200px;" title="{{ $c['description'] }}">
+                            {{ $c['description'] ?? '—' }}
+                        </div>
+                    </td>
+                    {{-- COLONNE 5: ASSIGNATION (Service + Agent) --}}
                     <td>
                         <div class="d-flex align-items-center">
                             <div class="avatar-circle me-2 bg-primary bg-opacity-10 text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center" 
@@ -119,7 +127,7 @@
                         </div>
                     </td>
 
-                    {{-- COLONNE 5: PIÈCE JOINTE --}}
+                    {{-- COLONNE 6: PIÈCE JOINTE --}}
                     <td>
                         @if($hasFile)
                             <a href="{{ $c['fichier']['url'] }}" target="_blank" 
@@ -144,7 +152,7 @@
                         @endif
                     </td>
 
-                    {{-- COLONNE 6: ACTIONS (Dropdown) --}}
+                    {{-- COLONNE 7: ACTIONS (Dropdown) --}}
                     <td class="text-end pe-3">
                         <div class="dropdown">
                             <button class="btn btn-light btn-sm rounded-circle border shadow-sm action-trigger" 
